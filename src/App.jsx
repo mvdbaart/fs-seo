@@ -58,6 +58,10 @@ export default function App() {
   const fetchDashboardData = async (targetProjectId) => {
     try {
       const projRes = await fetch('/api/projects');
+      if (!projRes.ok) {
+        console.error('Server error bij ophalen projecten:', projRes.statusText);
+        return;
+      }
       const projectsList = await projRes.json();
       setAllProjects(projectsList);
 

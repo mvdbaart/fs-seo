@@ -96,8 +96,9 @@ export default function AiPromptCanvas({
   };
 
   const handleCopyResultText = () => {
-    if (!aiResult?.generatedText) return;
-    navigator.clipboard.writeText(aiResult.generatedText);
+    const textToCopy = editedText || aiResult?.generatedText;
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
     setCopiedResult(true);
     setTimeout(() => setCopiedResult(false), 2500);
   };
@@ -271,33 +272,36 @@ export default function AiPromptCanvas({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (!aiResult?.generatedText) return;
-                  setBlogPushLoading(true);
-                  try {
-                    const res = await axios.post('/api/supabase/push-blog', {
-                      title: title || 'AI Gegenereerd Artikel',
-                      content: aiResult.generatedText,
-                      metaDescription: aiResult.generatedText.slice(0, 150).replace(/[\r\n]+/g, ' '),
-                      status: 'draft'
-                    });
-                    setBlogPushResult({ success: true, message: `Opgeslagen als concept (${res.data.table})` });
-                  } catch (err) {
-                    setBlogPushResult({ success: false, message: err.response?.data?.error || err.message });
-                  } finally {
-                    setBlogPushLoading(false);
-                  }
-                }}
-                disabled={blogPushLoading}
-                className="btn btn-sm btn-secondary"
-                style={{ fontSize: '0.78rem', background: '#059669', borderColor: '#059669', color: '#ffffff', fontWeight: 600 }}
-              >
-                {blogPushLoading ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
-                {blogPushLoading ? 'Pushen...' : '🚀 Push naar fs-next Blog (Concept)'}
-              </button>
+              {isBlogPrompt && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const textToPush = editedText || aiResult?.generatedText;
+                    if (!textToPush) return;
+                    setBlogPushLoading(true);
+                    try {
+                      const res = await axios.post('/api/supabase/push-blog', {
+                        title: title || 'AI Gegenereerd Artikel',
+                        content: textToPush,
+                        metaDescription: textToPush.slice(0, 150).replace(/[\r\n]+/g, ' '),
+                        status: 'draft'
+                      });
+                      setBlogPushResult({ success: true, message: `Opgeslagen als concept (${res.data.table})` });
+                    } catch (err) {
+                      setBlogPushResult({ success: false, message: err.response?.data?.error || err.message });
+                    } finally {
+                      setBlogPushLoading(false);
+                    }
+                  }}
+                  disabled={blogPushLoading}
+                  className="btn btn-sm btn-secondary"
+                  style={{ fontSize: '0.78rem', background: '#059669', borderColor: '#059669', color: '#ffffff', fontWeight: 600 }}
+                >
+                  {blogPushLoading ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
+                  {blogPushLoading ? 'Pushen...' : '🚀 Push naar fs-next Blog (Concept)'}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -329,16 +333,27 @@ export default function AiPromptCanvas({
                   {blogPushResult.success ? `✓ ${blogPushResult.message}` : `⚠ ${blogPushResult.message}`}
                 </div>
               )}
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.85rem',
-                lineHeight: 1.6,
-                color: '#1e293b',
-                whiteSpace: 'pre-wrap',
-                maxHeight: '350px',
-                overflowY: 'auto'
-              }}>
-                {aiResult.generatedText}
+              <textarea
+                className="input-field"
+                style={{
+                  width: '100%',
+                  minHeight: '180px',
+                  maxHeight: '400px',
+                  background: '#ffffff',
+                  border: '1px solid #e9d5ff',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '12px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.85rem',
+                  lineHeight: 1.6,
+                  color: '#1e293b',
+                  resize: 'vertical'
+                }}
+                value={editedText}
+                onChange={(e) => setEditedText(e.target.value)}
+              />
+              <div style={{ fontSize: '0.78rem', color: '#6b21a8', marginTop: '6px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                ✏️ <span>Je kunt de gegenereerde AI-output hierboven direct aanpassen als je het ergens niet mee eens bent.</span>
               </div>
             </div>
           )}

@@ -162,7 +162,7 @@ ${issues.map((iss, i) => `${i + 1}. [${iss.type.toUpperCase()}] ${iss.title}: ${
 
 === OPDRACHT VOOR DE AI ===
 Herschrijf en lever het volgende aan in perfect Nederlands geoptimaliseerd voor zoekmachines:
-1. **Vernieuwde SEO Title Tag** (45 - 58 tekens, inclusief primair zoekwoord & merknaam).
+1. **Vernieuwde SEO Title Tag** (45 - 58 tekens, inclusief primair zoekwoord. Laat de merknaam weglaten als de titel anders >58 tekens wordt; gebruik GEEN emdashes '—' maar slanke scheidingstekens '|' of '-').
 2. **Vernieuwde Meta Description** (135 - 155 tekens, met een krachtige Call To Action).
 3. **1x Geoptimaliseerde H1 Koptekst**.
 4. **Strategische H2 & H3 Structuur** (inclusief 4 relevante subkoppen met zoekwoorden).

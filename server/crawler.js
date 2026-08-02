@@ -169,10 +169,16 @@ class Crawler {
         const absoluteUrl = new URL(href, url).href;
         const cleanUrl = absoluteUrl.split('#')[0];
         
-        if (cleanUrl.startsWith(this.baseUrl)) {
-          internalLinks.add(cleanUrl);
-        } else if (cleanUrl.startsWith('http')) {
-          externalLinks.add(cleanUrl);
+        // Exclude system URLs (e.g. Cloudflare email protection, wp-admin) and static assets
+        const isSystemUrl = /\/(cdn-cgi|wp-admin|wp-includes|wp-json|\.well-known)\//i.test(cleanUrl) ||
+                            /\.(pdf|zip|jpg|jpeg|png|gif|svg|css|js|woff|woff2|ttf|eot)$/i.test(cleanUrl);
+
+        if (!isSystemUrl) {
+          if (cleanUrl.startsWith(this.baseUrl)) {
+            internalLinks.add(cleanUrl);
+          } else if (cleanUrl.startsWith('http')) {
+            externalLinks.add(cleanUrl);
+          }
         }
       } catch (e) {
         // Invalid URL

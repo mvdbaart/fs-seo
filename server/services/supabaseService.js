@@ -36,6 +36,34 @@ async function fetchSupabasePages() {
 }
 
 /**
+ * Synchroniseer een gegenereerde SEO Title, Meta Description of AI Prompt naar Supabase
+ */
+async function syncSeoMetadataToSupabase({ pageUrl, keyword, title, metaDescription, aiPrompt, status = 'optimized' }) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase is niet geconfigureerd');
+
+  const payload = {
+    url: pageUrl,
+    target_keyword: keyword,
+    seo_title: title,
+    meta_description: metaDescription,
+    ai_prompt: aiPrompt,
+    status: status,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('seo_metadata')
+    .upsert(payload, { onConflict: 'url' });
+
+  if (error) {
+    throw new Error(`Supabase Upsert Fout: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
  * Push een AI-gegenereerd artikel direct als concept naar marketing_content_items in fs-next Supabase
  */
 async function pushBlogPostToSupabase({ title, slug, metaDescription, content, targetKeywords, status = 'draft' }) {

@@ -99,7 +99,7 @@ Deze pagina's ranken al op pagina 1 van Google.nl maar halen te weinig klikken:
 ${ctrList}
 
 Opdracht:
-1. Geef per zoekwoord 2 geoptimaliseerde SEO Title Tags (45 - 58 tekens).
+1. Geef per zoekwoord 2 geoptimaliseerde SEO Title Tags (45 - 58 tekens). Laat de merknaam weg als de titel anders >58 tekens wordt, en gebruik geen emdashes (—) maar alleen '|' of '-'.
 2. Geef per zoekwoord 2 geoptimaliseerde Meta Descriptions (135 - 155 tekens).
 3. Verwerk concrete USP's en een duidelijke call-to-action.`,
 
