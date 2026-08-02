@@ -96,13 +96,16 @@ export default function LocalPackView({ projectId, activeProject }) {
             <Navigation size={20} color="var(--primary)" /> Google Maps Rankings per Regio
           </h3>
 
-          <div className="table-container" style={{ marginTop: '16px' }}>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+            De onderstaande tabel toont je <strong>beste organische positie</strong> in Google.nl voor jouw gemonitorde zoekwoorden per regio, en of je bedrijf getoond wordt in het <strong>Google Maps 3-pack</strong>.
+          </p>
+          <div className="table-container">
             <table className="custom-table">
               <thead>
                 <tr>
                   <th>Stad / Regio</th>
                   <th>Local Pack Vermeldingen</th>
-                  <th>Beste Organische Positie</th>
+                  <th>Beste Positie / Gem.</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -122,7 +125,14 @@ export default function LocalPackView({ projectId, activeProject }) {
                         {lr.localPackCount === null ? '—' : `${lr.localPackCount} van ${lr.totalKeywords} zoekwoorden`}
                       </span>
                     </td>
-                    <td>{lr.bestOrganic ? `#${lr.bestOrganic}` : 'Niet in Top 100'}</td>
+                    <td>
+                      {lr.bestOrganic ? (
+                        <span>
+                          <strong style={{ color: 'var(--primary)' }}>#{lr.bestOrganic}</strong>
+                          {lr.avgOrganic && <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginLeft: '6px' }}>(Gem. #{lr.avgOrganic})</span>}
+                        </span>
+                      ) : 'Niet in Top 100'}
+                    </td>
                     <td>
                       <span className={`badge badge-${lr.status === 'In Local Pack' ? 'success' : 'warning'}`}>
                         {lr.status}

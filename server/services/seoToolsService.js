@@ -44,13 +44,17 @@ function getLocalPackAudit(projectId) {
     }
     const localPackCount = rows.filter(r => r.local_pack_present === 1).length;
     const ranked = rows.filter(r => r.position > 0);
+    // Bereken het gemiddelde en de beste positie van alle écht gemonitorde zoekwoorden voor deze regio
     const bestOrganic = ranked.length > 0 ? Math.min(...ranked.map(r => r.position)) : null;
+    const sumOrganic = ranked.reduce((acc, r) => acc + r.position, 0);
+    const avgOrganic = ranked.length > 0 ? (sumOrganic / ranked.length).toFixed(1) : null;
 
-    let status = 'Niet zichtbaar';
+    let status = 'Niet in Top 100';
     if (localPackCount > 0) status = 'In Local Pack';
     else if (bestOrganic && bestOrganic <= 10) status = 'Organisch Top 10, geen Local Pack';
+    else if (bestOrganic && bestOrganic <= 50) status = `Organisch #${bestOrganic}, geen Local Pack`;
 
-    return { city: regionName, localPackCount, totalKeywords: rows.length, bestOrganic, status };
+    return { city: regionName, localPackCount, totalKeywords: rows.length, bestOrganic, avgOrganic, status };
   }).filter(r => r.totalKeywords > 0 || geoRows.length === 0);
 
   // Citations worden gepresenteerd op basis van Nederlandse autoriteit & gratis registratie.
