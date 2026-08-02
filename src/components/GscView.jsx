@@ -18,6 +18,7 @@ import {
   Tag
 } from 'lucide-react';
 import { isBrandKeyword } from '../utils/brandFilter';
+import AiPromptCanvas from './AiPromptCanvas';
 
 export default function GscView({ projectId, activeProject }) {
   const [gscData, setGscData] = useState(null);
@@ -346,44 +347,20 @@ export default function GscView({ projectId, activeProject }) {
       {/* AI Prompts Section */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         {/* Prompt 1: CTR Boost */}
-        <div className="card" style={{ border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
-                <Sparkles size={18} /> AI Prompt 1: Title & Meta CTR Boost
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Herschrijf Titles & Meta Descriptions om geklik te verdubbelen op Pagina 1.
-              </p>
-            </div>
-            <button className="btn btn-primary" onClick={() => handleCopyPrompt(aiPrompts.ctrBoostPrompt, 'ctr')}>
-              {copiedCtr ? <Check size={14} /> : <Copy size={14} />} {copiedCtr ? 'Gekopieerd' : 'Kopieer'}
-            </button>
-          </div>
-          <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: '250px', overflowY: 'auto' }}>
-            {aiPrompts.ctrBoostPrompt}
-          </div>
-        </div>
+        <AiPromptCanvas
+          promptId="gsc_ctr_boost"
+          title="AI Prompt 1: Title & Meta CTR Boost"
+          subtitle="Herschrijf Titles & Meta Descriptions om geklik te verdubbelen op Pagina 1."
+          promptText={aiPrompts?.ctrBoostPrompt}
+        />
 
         {/* Prompt 2: Page 2 to Page 1 Jump */}
-        <div className="card" style={{ border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
-                <Sparkles size={18} /> AI Prompt 2: Pagina 2 naar Pagina 1 Stijging
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Genereer 300 woorden verdiepende content & FAQ vragen voor pagina 2 zoekwoorden.
-              </p>
-            </div>
-            <button className="btn btn-primary" onClick={() => handleCopyPrompt(aiPrompts.page2JumpPrompt, 'page2')}>
-              {copiedPage2 ? <Check size={14} /> : <Copy size={14} />} {copiedPage2 ? 'Gekopieerd' : 'Kopieer'}
-            </button>
-          </div>
-          <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: '250px', overflowY: 'auto' }}>
-            {aiPrompts.page2JumpPrompt}
-          </div>
-        </div>
+        <AiPromptCanvas
+          promptId="gsc_page2_jump"
+          title="AI Prompt 2: Pagina 2 naar Pagina 1 Stijging"
+          subtitle="Genereer 300 woorden verdiepende content & FAQ vragen voor pagina 2 zoekwoorden."
+          promptText={aiPrompts?.page2JumpPrompt}
+        />
       </div>
     </div>
   );

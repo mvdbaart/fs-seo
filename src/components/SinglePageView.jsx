@@ -17,6 +17,7 @@ import {
   History,
   ArrowRight
 } from 'lucide-react';
+import AiPromptCanvas from './AiPromptCanvas';
 
 export default function SinglePageView({ projectId, projectDomain }) {
   const [url, setUrl] = useState(projectDomain ? `${projectDomain.replace(/\/$/, '')}/heftruck-cursus` : 'https://frissestart.nl/heftruck-cursus');
@@ -251,26 +252,13 @@ export default function SinglePageView({ projectId, projectDomain }) {
 
           {/* Tab 2: AI Prompt Proposal */}
           {activeTab === 'prompt' && (
-            <div className="card" style={{ border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
-                    <Sparkles size={20} /> Kant-en-klare AI Prompt Voorstel
-                  </h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    Kopieer deze prompt rechtstreeks naar ChatGPT, Claude of Gemini om deze pagina direct te herschrijven.
-                  </p>
-                </div>
-
-                <button className="btn btn-primary" onClick={handleCopyPrompt}>
-                  {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'Gekopieerd!' : 'Kopieer AI Prompt'}
-                </button>
-              </div>
-
-              <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '16px', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--text-main)', maxHeight: '450px', overflowY: 'auto' }}>
-                {result.aiPromptProposal}
-              </div>
-            </div>
+            <AiPromptCanvas
+              promptId={`single_page_${url.replace(/[^a-z0-9]/gi, '_')}`}
+              title="Kant-en-klare AI Prompt Voorstel"
+              subtitle="Kopieer deze prompt rechtstreeks naar ChatGPT, Claude of Gemini om deze pagina direct te herschrijven."
+              promptText={result.aiPromptProposal}
+              targetUrl={url}
+            />
           )}
 
           {/* Tab 3: Detailed Technical Meta Inspector */}

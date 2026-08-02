@@ -12,6 +12,7 @@ import {
   Code,
   ArrowRight
 } from 'lucide-react';
+import AiPromptCanvas from './AiPromptCanvas';
 
 export default function ContentOptimizerView({ projectId, activeProject, presetData }) {
   const [keyword, setKeyword] = useState(presetData?.keyword || 'certificeringsbeheer');
@@ -214,25 +215,13 @@ export default function ContentOptimizerView({ projectId, activeProject, presetD
           </div>
 
           {/* Section 3: AI Copywriting Prompt */}
-          <div className="card" style={{ border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
-                  <Sparkles size={18} /> 4. AI Prompt voor Volledig Pagina-Artikel
-                </h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Kopieer naar ChatGPT/Claude om direct een artikel van 750+ woorden te genereren.
-                </p>
-              </div>
-              <button className="btn btn-primary" onClick={() => copyToClipboard(result.brief.aiCopyPrompt, 'prompt')}>
-                {copiedPrompt ? <Check size={14} /> : <Copy size={14} />} {copiedPrompt ? 'Gekopieerd' : 'Kopieer AI Prompt'}
-              </button>
-            </div>
-
-            <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: '250px', overflowY: 'auto' }}>
-              {result.brief.aiCopyPrompt}
-            </div>
-          </div>
+          <AiPromptCanvas
+            promptId={`content_opt_${keyword.replace(/\s+/g, '_')}`}
+            title="4. AI Prompt voor Volledig Pagina-Artikel"
+            subtitle="Kopieer naar ChatGPT/Claude om direct een artikel van 750+ woorden te genereren."
+            promptText={result.brief.aiCopyPrompt}
+            targetUrl={url}
+          />
 
           {/* Section 4: Schema.org FAQ JSON-LD */}
           {result.faqSchema && (

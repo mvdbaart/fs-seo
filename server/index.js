@@ -20,12 +20,71 @@ const {
 } = require('./services/seoToolsService');
 const { getTopicClusters } = require('./services/pillarClusterService');
 const { isBrandKeyword } = require('./utils/brandFilter');
+const { publishUrl, getUrlStatus } = require('./services/googleIndexingService');
+const { isSupabaseConfigured, syncSeoMetadataToSupabase } = require('./services/supabaseService');
+const { generateAiContent } = require('./services/aiGenerator');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// ----------------------------------------------------
+// Google Indexing API Endpoints
+// ----------------------------------------------------
+app.post('/api/indexing/publish', async (req, res) => {
+  try {
+    const { url, type = 'URL_UPDATED' } = req.body;
+    if (!url) return res.status(400).json({ error: 'Geen URL opgegeven' });
+    const result = await publishUrl(url, type);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/indexing/status', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'Geen URL opgegeven' });
+    const result = await getUrlStatus(url);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Supabase Sync Endpoints
+// ----------------------------------------------------
+app.get('/api/supabase/status', (req, res) => {
+  res.json({ configured: isSupabaseConfigured() });
+});
+
+app.post('/api/supabase/sync', async (req, res) => {
+  try {
+    const { pageUrl, keyword, title, metaDescription, aiPrompt, status } = req.body;
+    const result = await syncSeoMetadataToSupabase({ pageUrl, keyword, title, metaDescription, aiPrompt, status });
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Direct AI Generation Endpoints
+// ----------------------------------------------------
+app.post('/api/ai/generate', async (req, res) => {
+  try {
+    const { promptText, provider = 'auto', style = 'default' } = req.body;
+    if (!promptText) return res.status(400).json({ error: 'Geen prompttekst opgegeven' });
+    const result = await generateAiContent({ promptText, provider, style });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ----------------------------------------------------
 // fs-next Live Integration Endpoints
