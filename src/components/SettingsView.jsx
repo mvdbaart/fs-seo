@@ -14,6 +14,10 @@ export default function SettingsView({ activeProject, onProjectChange }) {
   const [reportRecipients, setReportRecipients] = useState('');
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [clarityProjectId, setClarityProjectId] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [githubRepo, setGithubRepo] = useState('FrisseStart/fs-next');
+  const [remoteFsNextUrl, setRemoteFsNextUrl] = useState('');
+  const [githubStatus, setGithubStatus] = useState(null);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [saved, setSaved] = useState(false);
   const [projects, setProjects] = useState([]);
@@ -39,11 +43,26 @@ export default function SettingsView({ activeProject, onProjectChange }) {
       if (data.business_phone) setBusinessPhone(data.business_phone);
       if (data.ga4_property_id) setGa4PropertyId(data.ga4_property_id);
       if (data.clarity_project_id) setClarityProjectId(data.clarity_project_id);
+      if (data.github_token) setGithubToken(data.github_token);
+      if (data.github_repo) setGithubRepo(data.github_repo);
+      if (data.remote_fs_next_url) setRemoteFsNextUrl(data.remote_fs_next_url);
       setAutoCheckEnabled(data.auto_check_enabled === '1');
       if (data.auto_check_frequency) setAutoCheckFrequency(data.auto_check_frequency);
       if (data.report_email_recipients) setReportRecipients(data.report_email_recipients);
+
+      fetchGithubStatus();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchGithubStatus = async () => {
+    try {
+      const res = await fetch('/api/github/status');
+      const data = await res.json();
+      setGithubStatus(data);
+    } catch (err) {
+      console.error('Fout bij ophalen GitHub status:', err);
     }
   };
 
@@ -68,6 +87,9 @@ export default function SettingsView({ activeProject, onProjectChange }) {
         business_phone: businessPhone,
         ga4_property_id: ga4PropertyId,
         clarity_project_id: clarityProjectId,
+        github_token: githubToken,
+        github_repo: githubRepo,
+        remote_fs_next_url: remoteFsNextUrl,
         auto_check_enabled: autoCheckEnabled ? '1' : '0',
         auto_check_frequency: autoCheckFrequency,
         report_email_recipients: reportRecipients
@@ -313,6 +335,72 @@ export default function SettingsView({ activeProject, onProjectChange }) {
                 Vind in Clarity Settings ➔ Overview ➔ Project ID.
               </span>
             </div>
+          </div>
+
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '18px 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Globe size={18} color="var(--primary)" /> GitHub & Remote Vercel Connector (`github-fs`)
+          </h3>
+          <div style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+                  GitHub Personal Access Token (PAT)
+                </label>
+                <input
+                  type="password"
+                  className="input-field"
+                  placeholder="github_pat_11..."
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                  PAT met `repo` / `contents:write` rechten om direct op GitHub te pushen.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+                  GitHub Repository (Owner/Repo)
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="FrisseStart/fs-next"
+                  value={githubRepo}
+                  onChange={(e) => setGithubRepo(e.target.value)}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                  De GitHub repository waarnaar Vercel is gekoppeld.
+                </span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+                Remote Vercel URL (Productie / Staging API)
+              </label>
+              <input
+                type="url"
+                className="input-field"
+                placeholder="https://frissestart.nl of https://fs-next-xxx.vercel.app"
+                value={remoteFsNextUrl}
+                onChange={(e) => setRemoteFsNextUrl(e.target.value)}
+              />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                Hiermee communiceert de SEO App direct wanneer fs-next live op Vercel staat.
+              </span>
+            </div>
+
+            {githubStatus && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '10px', fontSize: '0.82rem' }}>
+                <span className={`badge ${githubStatus.gitHubApiConnection ? 'badge-success' : 'badge-warning'}`}>
+                  {githubStatus.gitHubApiConnection ? 'GitHub Repo: Gekoppeld' : 'GitHub: Vul PAT Token in'}
+                </span>
+                <span className={`badge ${githubStatus.remoteVercelConnection ? 'badge-success' : 'badge-info'}`}>
+                  {githubStatus.remoteVercelConnection ? 'Vercel API: Live Online' : 'Vercel API: Standby / Lokaal'}
+                </span>
+              </div>
+            )}
           </div>
 
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 12px' }}>Bedrijfsgegevens (NAP) voor Local SEO</h3>

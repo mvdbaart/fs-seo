@@ -96,6 +96,39 @@ app.post('/api/fs-next/import-sitemap-keywords', async (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// GitHub & Remote Vercel Connector Endpoints
+// ----------------------------------------------------
+const githubConnector = require('./services/githubConnector');
+
+app.get('/api/github/status', async (req, res) => {
+  try {
+    const status = await githubConnector.getStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/github/fetch-sitemap', async (req, res) => {
+  try {
+    const data = await githubConnector.fetchSitemapFromGithub();
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/github/commit-fix', async (req, res) => {
+  try {
+    const { filePath, commitMessage, fileContent } = req.body;
+    const result = await githubConnector.pushSeoFixToGithub({ filePath, commitMessage, fileContent });
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 
 // ----------------------------------------------------
