@@ -152,6 +152,20 @@ app.get('/api/projects/:id/schema-generator', (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// Google Business Profile (My Business) API Endpoint
+// ----------------------------------------------------
+const { getGbpAnalysis } = require('./services/gbpService');
+
+app.get('/api/projects/:id/gbp', async (req, res) => {
+  try {
+    const data = await getGbpAnalysis(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen Google Bedrijfsprofiel data: ' + err.message });
+  }
+});
+
 app.get('/api/projects/:id/internal-links', (req, res) => {
   try {
     const data = getInternalLinkMatrix(req.params.id);

@@ -25,9 +25,13 @@ export default function LocalPackView({ projectId, activeProject }) {
   const fetchLocalPackData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/projects/${projectId || 1}/local-pack`);
-      const result = await res.json();
-      setData(result);
+      const [resPack, resGbp] = await Promise.all([
+        fetch(`/api/projects/${projectId || 1}/local-pack`),
+        fetch(`/api/projects/${projectId || 1}/gbp`)
+      ]);
+      const result = await resPack.json();
+      const gbpResult = await resGbp.json();
+      setData({ ...result, gbp: gbpResult });
     } catch (err) {
       console.error(err);
     } finally {
@@ -57,6 +61,46 @@ export default function LocalPackView({ projectId, activeProject }) {
           Local pack aanwezigheid per regio op basis van de laatste regionale scan, plus een checklist voor consistente bedrijfsvermeldingen.
         </p>
       </div>
+
+      {/* Google Bedrijfsprofiel (My Business) API Live Status Card */}
+      {data.gbp && (
+        <div className="card" style={{ border: data.gbp.connected ? '1px solid var(--primary-border)' : '1px solid #fef0c7', background: data.gbp.connected ? 'var(--primary-light)' : '#fffaeb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 className="card-title" style={{ margin: 0, fontSize: '1.1rem' }}>
+              <Building2 size={20} color={data.gbp.connected ? 'var(--primary)' : 'var(--warning)'} /> Live Google Mijn Bedrijf Connector & Analyse
+            </h3>
+            <span className={`badge ${data.gbp.connected ? 'badge-success' : 'badge-warning'}`}>
+              {data.gbp.connected ? 'GMB Live Gekoppeld' : 'GMB API: Koppelings-instructies'}
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+            {data.gbp.connected
+              ? `Je Google Bedrijfsprofiel is live gekoppeld! Gezondheidsscore: ${data.gbp.profileHealthScore}/100.`
+              : `Machtig je bestaande Service Account om live statistieken, foto-posts en openingstijden van Google Bedrijfsprofiel automatisch uit te lezen.`}
+          </p>
+
+          <div style={{ background: '#ffffff', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '12px', fontSize: '0.85rem' }}>
+            <strong>🔑 Service Account e-mailadres:</strong> <code style={{ color: 'var(--primary)' }}>{data.gbp.serviceAccountEmail}</code>
+            <p style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+              Stappen om live te verbinden: Ga naar <a href="https://business.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>business.google.com</a> ➔ <strong>Instellingen ➔ Gebruikers ➔ Toevoegen</strong> ➔ Geef bovenstaand e-mailadres de rol <em>Beheerder / Manager</em>.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>📋 Live Aanbevelingen voor je Bedrijfsprofiel:</strong>
+            {data.gbp.recommendations.map((rec, i) => (
+              <div key={i} style={{ background: '#ffffff', padding: '10px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>{rec.title}</strong>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{rec.description}</div>
+                </div>
+                <span className="badge badge-info">{rec.category}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* NAP Consistency Check */}
       <div className="card">
