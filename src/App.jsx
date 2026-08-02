@@ -213,7 +213,7 @@ export default function App() {
               {activeTab === 'internallinks' && 'Interne Link Matrix & Weespagina Detector'}
               {activeTab === 'competitorgap' && 'Concurrentie Keyword Gap & Content Cannibalisatie'}
               {activeTab === 'geo' && 'GEO & Regionale Zichtbaarheid'}
-              {activeTab === 'crawler' && 'Screaming Frog Style Website Crawler'}
+              {activeTab === 'crawler' && 'Website Krawler'}
               {activeTab === 'rankings' && 'Keyword Rank Tracker (Google.nl)'}
               {activeTab === 'pagespeed' && 'Google PageSpeed & Core Web Vitals'}
               {activeTab === 'reports' && 'SEO Management Rapporten & AI Advies'}

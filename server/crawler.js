@@ -36,7 +36,7 @@ class Crawler {
 
         if (pageData.internalLinks) {
           for (const link of pageData.internalLinks) {
-            if (!this.visited.has(link) && !this.queue.includes(link) && this.visited.size + this.queue.length < this.maxPages * 2) {
+            if (!this.visited.has(link) && !this.queue.includes(link) && this.visited.size + this.queue.length < this.maxPages * 3) {
               this.queue.push(link);
             }
           }
@@ -75,7 +75,10 @@ class Crawler {
 
   extractTopKeywords(text) {
     if (!text) return '';
-    const stopWords = new Set(['de', 'het', 'een', 'en', 'van', 'in', 'op', 'voor', 'met', 'is', 'om', 'te', 'aan', 'er', 'zijn', 'bij', 'ook', 'als', 'door', 'over', 'of', 'naar', 'je', 'uw', 'ons', 'onszelf', 'dit', 'dat', 'die', 'deze', 'meer', 'niet', 'wel']);
+    const stopWords = new Set([
+      'de', 'het', 'een', 'en', 'van', 'in', 'op', 'voor', 'met', 'is', 'om', 'te', 'aan', 'er', 'zijn', 'bij', 'ook', 'als', 'door', 'over', 'of', 'naar', 'je', 'uw', 'ons', 'onszelf', 'dit', 'dat', 'die', 'deze', 'meer', 'niet', 'wel',
+      'beter', 'beste', 'goed', 'onze', 'geen', 'alle', 'wordt', 'kunnen', 'wilt', 'gaat', 'moet', 'hebben', 'heel', 'zo'
+    ]);
     const words = text.toLowerCase().replace(/[^a-z0-9áéíóúäëïöüñ\s]/gi, ' ').split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
     
     const freq = {};

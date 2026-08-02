@@ -129,7 +129,7 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
       <div className="card">
         <div className="card-title" style={{ justifyContent: 'space-between' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Globe size={20} color="var(--primary)" /> On-Page SEO Crawler (Screaming Frog Engine)
+            <Globe size={20} color="var(--primary)" /> On-Page SEO Website Krawler
           </span>
 
           {session && (
@@ -150,7 +150,7 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
           />
           <select 
             className="input-field" 
-            style={{ maxWidth: '150px' }}
+            style={{ maxWidth: '170px' }}
             value={maxPages}
             onChange={(e) => setMaxPages(e.target.value)}
           >
@@ -158,6 +158,10 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
             <option value={25}>25 Pagina's</option>
             <option value={50}>50 Pagina's</option>
             <option value={100}>100 Pagina's</option>
+            <option value={250}>250 Pagina's</option>
+            <option value={500}>500 Pagina's</option>
+            <option value={1000}>1000 Pagina's</option>
+            <option value={5000}>5000 (Max Batches)</option>
           </select>
           
           <button type="submit" className="btn btn-primary" disabled={loading}>
