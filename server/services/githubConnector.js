@@ -7,7 +7,7 @@ const axios = require('axios');
 
 class GithubConnector {
   constructor() {
-    this.githubToken = process.env.GITHUB_TOKEN || process.env.GH_PAT || '';
+    this.githubToken = process.env.GITHUB_PAT_FS_NEXT || process.env.GITHUB_TOKEN || process.env.GH_PAT || '';
     this.repoOwner = process.env.GITHUB_REPO_OWNER || 'FrisseStart';
     this.repoName = process.env.GITHUB_REPO_NAME || 'fs-next';
     this.remoteApiUrl = process.env.REMOTE_FS_NEXT_URL || process.env.VERCEL_URL || '';
