@@ -1,5 +1,18 @@
 :root {
-  /* FrisseStart (fs-next) Light Mode Design Tokens */
+  /* FrisseStart Official Design System Tokens */
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-light: #ecfdf5;
+  --primary-border: #d1fae5;
+  
+  --brand-orange: #f18b1a;
+  --brand-orange-hover: #ec7a06;
+  --brand-orange-light: #fff6ed;
+  --brand-orange-border: #ffead5;
+  
+  --secondary: #f18b1a;
+  --secondary-light: #fff6ed;
+  
   --bg-main: #fafaf8;
   --bg-card: #ffffff;
   --bg-card-hover: #f5f4f1;
@@ -7,16 +20,8 @@
   --border-color: #e4e4e7;
   --border-active: #059669;
   
-  --primary: #059669;
-  --primary-hover: #047857;
-  --primary-light: #ecfdf5;
-  --primary-border: #d1fae5;
-  
   --accent: #12b76a;
   --accent-light: #ecfdf3;
-  
-  --secondary: #f18b1a;
-  --secondary-light: #fff6ed;
   
   --warning: #f79009;
   --warning-light: #fffaeb;
