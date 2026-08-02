@@ -12,6 +12,8 @@ export default function SettingsView({ activeProject, onProjectChange }) {
   const [autoCheckEnabled, setAutoCheckEnabled] = useState(false);
   const [autoCheckFrequency, setAutoCheckFrequency] = useState('daily');
   const [reportRecipients, setReportRecipients] = useState('');
+  const [ga4PropertyId, setGa4PropertyId] = useState('');
+  const [clarityProjectId, setClarityProjectId] = useState('');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [saved, setSaved] = useState(false);
   const [projects, setProjects] = useState([]);
@@ -35,6 +37,8 @@ export default function SettingsView({ activeProject, onProjectChange }) {
       if (data.business_name) setBusinessName(data.business_name);
       if (data.business_address) setBusinessAddress(data.business_address);
       if (data.business_phone) setBusinessPhone(data.business_phone);
+      if (data.ga4_property_id) setGa4PropertyId(data.ga4_property_id);
+      if (data.clarity_project_id) setClarityProjectId(data.clarity_project_id);
       setAutoCheckEnabled(data.auto_check_enabled === '1');
       if (data.auto_check_frequency) setAutoCheckFrequency(data.auto_check_frequency);
       if (data.report_email_recipients) setReportRecipients(data.report_email_recipients);
@@ -62,6 +66,8 @@ export default function SettingsView({ activeProject, onProjectChange }) {
         business_name: businessName,
         business_address: businessAddress,
         business_phone: businessPhone,
+        ga4_property_id: ga4PropertyId,
+        clarity_project_id: clarityProjectId,
         auto_check_enabled: autoCheckEnabled ? '1' : '0',
         auto_check_frequency: autoCheckFrequency,
         report_email_recipients: reportRecipients
@@ -272,6 +278,41 @@ export default function SettingsView({ activeProject, onProjectChange }) {
                 </div>
               </div>
             )}
+          </div>
+
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 12px' }}>Conversie & UX Analytics Koppelingen</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+                Google Analytics 4 (GA4) Property ID
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="bijv. 348291056"
+                value={ga4PropertyId}
+                onChange={(e) => setGa4PropertyId(e.target.value)}
+              />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                Numerieke ID in GA4 Beheer ➔ Property Settings. Gebruikt hetzelfde Service Account.
+              </span>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+                Microsoft Clarity Project ID / API Key
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="bijv. k9x2p8q1m"
+                value={clarityProjectId}
+                onChange={(e) => setClarityProjectId(e.target.value)}
+              />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                Vind in Clarity Settings ➔ Overview ➔ Project ID.
+              </span>
+            </div>
           </div>
 
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 12px' }}>Bedrijfsgegevens (NAP) voor Local SEO</h3>

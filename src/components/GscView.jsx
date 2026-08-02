@@ -135,7 +135,7 @@ export default function GscView({ projectId, activeProject }) {
 
             <button className="btn btn-primary" onClick={fetchGscData} disabled={loading}>
               <RefreshCw size={16} className={loading ? 'spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-              Vernieuw GSC Data
+              {loading ? 'Verbinding Testen...' : '🧪 Test GSC Verbinding'}
             </button>
           </div>
         </div>

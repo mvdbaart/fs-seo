@@ -17,7 +17,8 @@ import {
   ChevronDown,
   ChevronRight,
   Wrench,
-  TrendingUp
+  TrendingUp,
+  Activity
 } from 'lucide-react';
 
 import DashboardView from './components/DashboardView';
@@ -34,6 +35,7 @@ import SchemaGeneratorView from './components/SchemaGeneratorView';
 import InternalLinkView from './components/InternalLinkView';
 import CompetitorGapView from './components/CompetitorGapView';
 import ContentOptimizerView from './components/ContentOptimizerView';
+import Ga4ClarityView from './components/Ga4ClarityView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -146,6 +148,9 @@ export default function App() {
               </li>
               <li className={`nav-item ${activeTab === 'gsc' ? 'active' : ''}`} onClick={() => setActiveTab('gsc')}>
                 <BarChart3 className="nav-item-icon" /> Search Console
+              </li>
+              <li className={`nav-item ${activeTab === 'ga4clarity' ? 'active' : ''}`} onClick={() => setActiveTab('ga4clarity')}>
+                <Activity className="nav-item-icon" /> GA4 & Clarity Analytics
               </li>
               <li className={`nav-item ${activeTab === 'localpack' ? 'active' : ''}`} onClick={() => setActiveTab('localpack')}>
                 <MapPin className="nav-item-icon" /> Local Pack (Maps)
@@ -277,6 +282,10 @@ export default function App() {
 
         {activeTab === 'gsc' && (
           <GscView projectId={activeProject?.id} activeProject={activeProject} />
+        )}
+
+        {activeTab === 'ga4clarity' && (
+          <Ga4ClarityView projectId={activeProject?.id} activeProject={activeProject} />
         )}
 
         {activeTab === 'schemagen' && (

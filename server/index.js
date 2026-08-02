@@ -138,8 +138,18 @@ app.get('/api/projects/:id/competitor-gap', (req, res) => {
 });
 
 // ----------------------------------------------------
-// Google Search Console (GSC) Endpoints
+// GA4 & Microsoft Clarity Analytics Endpoints
 // ----------------------------------------------------
+const { getGa4ClarityAnalytics } = require('./services/ga4ClarityService');
+
+app.get('/api/projects/:id/ga4-clarity', async (req, res) => {
+  try {
+    const data = await getGa4ClarityAnalytics(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen GA4/Clarity data: ' + err.message });
+  }
+});
 app.get('/api/projects/:id/gsc', async (req, res) => {
   try {
     const data = await analyzeGscData(req.params.id);
