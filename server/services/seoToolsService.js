@@ -1,5 +1,6 @@
 const db = require('../db');
 const { REGIONS } = require('./geoAnalyzer');
+const { isBrandKeyword } = require('../utils/brandFilter');
 
 /**
  * Advanced SEO Tools Service: Local Pack Audit, Schema Generator, Internal Links & Competitor Gap.
@@ -199,6 +200,66 @@ function getSchemaGenerator(projectId) {
           { "@type": "ListItem", "position": 2, "name": "[Pagina]", "item": `${domain}/[pagina]` }
         ]
       }, null, 2)
+    },
+    jobPosting: {
+      title: 'JobPosting Schema (Vacatures voor Google Jobs)',
+      jsonLd: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "[Functietitel, bijv. Procesoperator 5-ploegen]",
+        "description": "<p>[Uitgebreide functieomschrijving, eisen en secundaire arbeidsvoorwaarden]</p>",
+        "identifier": {
+          "@type": "PropertyValue",
+          "name": businessName,
+          "value": "[Vacature-ID]"
+        },
+        "datePosted": new Date().toISOString().split('T')[0],
+        "validThrough": new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
+        "employmentType": "FULL_TIME",
+        "hiringOrganization": {
+          "@type": "Organization",
+          "name": businessName,
+          "sameAs": domain,
+          "logo": `${domain}/logo.png`
+        },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": addressParts[0] || address,
+            "addressLocality": addressParts[2] || addressParts[1] || 'Eindhoven',
+            "postalCode": addressParts[1] || '[Postcode]',
+            "addressCountry": "NL"
+          }
+        },
+        "baseSalary": {
+          "@type": "MonetaryAmount",
+          "currency": "EUR",
+          "value": {
+            "@type": "QuantitativeValue",
+            "minValue": 2500,
+            "maxValue": 3800,
+            "unitText": "MONTH"
+          }
+        }
+      }, null, 2)
+    },
+    contactPoint: {
+      title: 'ContactPoint & Organization (Contactpagina)',
+      jsonLd: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": businessName,
+        "url": domain,
+        "logo": `${domain}/logo.png`,
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": phone,
+          "contactType": "customer service",
+          "areaServed": "NL",
+          "availableLanguage": ["Dutch", "English"]
+        }
+      }, null, 2)
     }
   };
 
@@ -261,15 +322,54 @@ function getInternalLinkMatrix(projectId) {
       outbound_count: p.links_internal_count || 0
     }));
 
+  const isUtilityUrl = (url) => {
+    const lower = (url || '').toLowerCase();
+    return lower.includes('/contact') || 
+           lower.includes('/aanmelden') || 
+           lower.includes('/vacatures/') || 
+           lower.includes('/privacy') || 
+           lower.includes('voorwaarden') ||
+           lower.includes('disclaimer');
+  };
+
   const orphanPages = enriched.filter(p => p.links_internal_count <= 1 && normalize(p.url) !== startUrl);
 
-  // Linkkansen: van de sterkst gelinkte pagina's (hubs) naar weespagina's en doelzoekwoord pagina's
-  const hubs = [...enriched].sort((a, b) => b.links_internal_count - a.links_internal_count).slice(0, 5);
+  // Gefilterde lijst van echte content hubs (uitzondering van contact, vacatures, etc.)
+  const eligibleHubs = enriched
+    .filter(p => !isUtilityUrl(p.url))
+    .sort((a, b) => b.links_internal_count - a.links_internal_count);
+
+  // Hulpfunctie om de meest relevante bronpagina (hub) te selecteren voor een doelpagina
+  const findBestHubForTarget = (targetUrl, targetKeyword) => {
+    const normTarget = normalize(targetUrl);
+    const normKw = (targetKeyword || '').toLowerCase();
+
+    const candidates = eligibleHubs.filter(h => normalize(h.url) !== normTarget);
+    if (candidates.length === 0) return null;
+
+    // 1. Zoek naar thematische match in pillar pagina's (bijv. code-95, heftruck, transport, logistiek)
+    const topics = ['code-95', 'heftruck', 'transport', 'logistiek', 'opleidingen', 'nascholing', 'chauffeur'];
+    const matchedTopic = topics.find(t => normTarget.toLowerCase().includes(t) || normKw.includes(t));
+
+    if (matchedTopic) {
+      const topicHub = candidates.find(h => h.url.toLowerCase().includes(matchedTopic) && normalize(h.url) !== normTarget);
+      if (topicHub) return topicHub;
+    }
+
+    // 2. Homepage is de hoogste autoriteit hub
+    const homepageHub = candidates.find(h => normalize(h.url) === startUrl);
+    if (homepageHub) return homepageHub;
+
+    // 3. Fallback naar sterkst gelinkte niet-utility pagina
+    return candidates[0];
+  };
+
   const recommendations = [];
 
-  // 1. Kansen voor Weespagina's
-  for (const orphan of orphanPages.slice(0, 10)) {
-    const hub = hubs.find(h => normalize(h.url) !== normalize(orphan.url));
+  // 1. Kansen voor Weespagina's (alleen voor content/landingspagina's)
+  const contentOrphans = orphanPages.filter(p => !isUtilityUrl(p.url));
+  for (const orphan of contentOrphans.slice(0, 10)) {
+    const hub = findBestHubForTarget(orphan.url, orphan.keywords);
     if (!hub) continue;
     const anchor = (orphan.keywords || '').split(',')[0].trim() || orphan.title || orphan.url;
     recommendations.push({
@@ -277,7 +377,7 @@ function getInternalLinkMatrix(projectId) {
       toUrl: orphan.url,
       anchorText: anchor,
       priority: 'Kritiek',
-      reason: `${orphan.url} is een weespagina (${orphan.links_internal_count} links). Een link vanaf autoriteitspagina ${hub.url} (${hub.links_internal_count} inkomende links) verhoogt de indexatie en waarde.`
+      reason: `${orphan.url} is een weespagina (${orphan.links_internal_count} links). Een interne link vanaf de relevante autoriteitspagina ${hub.url} verhoogt de vindbaarheid.`
     });
   }
 
@@ -292,23 +392,24 @@ function getInternalLinkMatrix(projectId) {
   `).all(projectId);
 
   for (const kw of trackedKeywords) {
-    if (!kw.target_url) continue;
+    if (!kw.target_url || isUtilityUrl(kw.target_url)) continue;
     const normTarget = normalize(kw.target_url);
-    const hub = hubs.find(h => normalize(h.url) !== normTarget);
+
+    const hub = findBestHubForTarget(kw.target_url, kw.keyword);
     if (hub && !recommendations.some(r => normalize(r.toUrl) === normTarget)) {
       recommendations.push({
         fromUrl: hub.url,
         toUrl: kw.target_url,
         anchorText: kw.keyword,
         priority: kw.position && kw.position <= 20 ? 'Hoog' : 'Normaal',
-        reason: `Versterk de positie van zoekwoord "${kw.keyword}" (${kw.position ? 'positie #' + kw.position : 'onbekend'}) door vanaf de hub-pagina ${hub.url} te linken.`
+        reason: `Versterk de positie van zoekwoord "${kw.keyword}" (${kw.position ? 'positie #' + kw.position : 'onbekend'}) door een contextuele link te plaatsen op de relevante hub-pagina ${hub.url}.`
       });
     }
   }
 
   // 3. Generieke suggestie indien nog geen crawl data beschikbaar
   if (recommendations.length === 0 && enriched.length > 0) {
-    const mainHub = enriched[0];
+    const mainHub = eligibleHubs[0] || enriched[0];
     recommendations.push({
       fromUrl: mainHub.url,
       toUrl: `${mainHub.url.replace(/\/$/, '')}/code-95-eindhoven`,
@@ -343,6 +444,8 @@ function getCompetitorGapAnalysis(projectId) {
     AND r.id = (SELECT id FROM keyword_rankings WHERE keyword_id = k.id ORDER BY checked_at DESC LIMIT 1)
   `).all(projectId);
 
+  const businessName = getSetting('business_name') || project.name;
+
   const withSnapshots = rankings.filter(r => {
     try {
       return JSON.parse(r.organic_results || '[]').length > 0;
@@ -361,7 +464,7 @@ function getCompetitorGapAnalysis(projectId) {
   if (competitors.length === 0) {
     return {
       gaps: [],
-      cannibalization: detectCannibalization(withSnapshots, ownDomain),
+      cannibalization: detectCannibalization(withSnapshots, ownDomain, businessName),
       message: 'Nog geen concurrenten toegevoegd. Voeg concurrenten toe in de GEO Analyse tab om de keyword gap te berekenen.'
     };
   }
@@ -393,13 +496,17 @@ function getCompetitorGapAnalysis(projectId) {
 
   return {
     gaps,
-    cannibalization: detectCannibalization(withSnapshots, ownDomain)
+    cannibalization: detectCannibalization(withSnapshots, ownDomain, businessName)
   };
 }
 
-function detectCannibalization(rankingsWithSnapshots, ownDomain) {
+function detectCannibalization(rankingsWithSnapshots, ownDomain, businessName = '') {
   const cannibalization = [];
   for (const row of rankingsWithSnapshots) {
+    if (isBrandKeyword(row.keyword, ownDomain, businessName)) {
+      continue;
+    }
+
     const organic = JSON.parse(row.organic_results);
     const ownEntries = organic.filter(o => o.link.includes(ownDomain));
     if (ownEntries.length >= 2) {

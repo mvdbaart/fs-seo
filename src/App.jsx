@@ -18,7 +18,8 @@ import {
   ChevronRight,
   Wrench,
   TrendingUp,
-  Activity
+  Activity,
+  Layers
 } from 'lucide-react';
 
 import DashboardView from './components/DashboardView';
@@ -36,6 +37,7 @@ import InternalLinkView from './components/InternalLinkView';
 import CompetitorGapView from './components/CompetitorGapView';
 import ContentOptimizerView from './components/ContentOptimizerView';
 import Ga4ClarityView from './components/Ga4ClarityView';
+import PillarClusterView from './components/PillarClusterView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -182,6 +184,9 @@ export default function App() {
               <li className={`nav-item ${activeTab === 'crawler' ? 'active' : ''}`} onClick={() => setActiveTab('crawler')}>
                 <Globe className="nav-item-icon" /> On-Page Crawler
               </li>
+              <li className={`nav-item ${activeTab === 'topicclusters' ? 'active' : ''}`} onClick={() => setActiveTab('topicclusters')}>
+                <Layers className="nav-item-icon" /> Topic Clusters & Pillars
+              </li>
               <li className={`nav-item ${activeTab === 'internallinks' ? 'active' : ''}`} onClick={() => setActiveTab('internallinks')}>
                 <Network className="nav-item-icon" /> Interne Link Matrix
               </li>
@@ -215,6 +220,7 @@ export default function App() {
               {activeTab === 'gsc' && 'Google Search Console Audit & Plan van Aanpak'}
               {activeTab === 'schemagen' && 'AI Schema.org JSON-LD Rich Snippet Generator'}
               {activeTab === 'singlepage' && 'Single Page SEO Doctor & AI Prompt Generator'}
+              {activeTab === 'topicclusters' && 'Topic Clusters & Pillar Page Analyzer'}
               {activeTab === 'internallinks' && 'Interne Link Matrix & Weespagina Detector'}
               {activeTab === 'competitorgap' && 'Concurrentie Keyword Gap & Content Cannibalisatie'}
               {activeTab === 'geo' && 'GEO & Regionale Zichtbaarheid'}
@@ -296,8 +302,12 @@ export default function App() {
           <SinglePageView projectId={activeProject?.id} projectDomain={activeProject?.domain} />
         )}
 
+        {activeTab === 'topicclusters' && (
+          <PillarClusterView projectId={activeProject?.id} />
+        )}
+
         {activeTab === 'internallinks' && (
-          <InternalLinkView projectId={activeProject?.id} />
+          <InternalLinkView projectId={activeProject?.id} onNavigateTab={(tab) => setActiveTab(tab)} />
         )}
 
         {activeTab === 'competitorgap' && (

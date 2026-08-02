@@ -25,6 +25,7 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPage, setSelectedPage] = useState(null);
+  const [wrapText, setWrapText] = useState(true);
 
   // Sorting state
   const [sortField, setSortField] = useState('url');
@@ -230,49 +231,61 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
               </button>
             </div>
 
-            <div style={{ position: 'relative', width: '260px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input 
-                type="text"
-                className="input-field"
-                style={{ paddingLeft: '36px' }}
-                placeholder="Zoek in URL's & keywords..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button 
+                type="button"
+                className={`btn ${wrapText ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.8rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                onClick={() => setWrapText(!wrapText)}
+                title="Wissel tussen volledige tekstweergave en compacte regels"
+              >
+                {wrapText ? 'Tekst Inklappen (Compact)' : 'Volledige Tekst Tonen'}
+              </button>
+
+              <div style={{ position: 'relative', width: '240px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input 
+                  type="text"
+                  className="input-field"
+                  style={{ paddingLeft: '36px' }}
+                  placeholder="Zoek in URL's & keywords..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
           {/* Screaming Frog Interactive Sortable Table */}
           <div className="table-container">
-            <table className="custom-table">
+            <table className={`custom-table ${wrapText ? 'wrap-text' : ''}`}>
               <thead>
                 <tr>
-                  <th onClick={() => handleSort('status_code')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('status_code')} style={{ cursor: 'pointer', minWidth: '90px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Status {renderSortIcon('status_code')}</div>
                   </th>
-                  <th onClick={() => handleSort('url')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('url')} style={{ cursor: 'pointer', minWidth: '220px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>URL {renderSortIcon('url')}</div>
                   </th>
-                  <th onClick={() => handleSort('keywords')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('keywords')} style={{ cursor: 'pointer', minWidth: '130px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Focus Keywords {renderSortIcon('keywords')}</div>
                   </th>
-                  <th onClick={() => handleSort('title')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('title')} style={{ cursor: 'pointer', minWidth: '240px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Title Tag {renderSortIcon('title')}</div>
                   </th>
-                  <th onClick={() => handleSort('title_length')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('title_length')} style={{ cursor: 'pointer', minWidth: '110px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Title Lengte {renderSortIcon('title_length')}</div>
                   </th>
-                  <th onClick={() => handleSort('meta_description')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('meta_description')} style={{ cursor: 'pointer', minWidth: '300px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Meta Description {renderSortIcon('meta_description')}</div>
                   </th>
-                  <th onClick={() => handleSort('h1')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('h1')} style={{ cursor: 'pointer', minWidth: '240px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>H1 Koptekst {renderSortIcon('h1')}</div>
                   </th>
-                  <th onClick={() => handleSort('images_missing_alt')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('images_missing_alt')} style={{ cursor: 'pointer', minWidth: '140px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>NoAlt Afbeeldingen {renderSortIcon('images_missing_alt')}</div>
                   </th>
-                  <th onClick={() => handleSort('load_time_ms')} style={{ cursor: 'pointer' }}>
+                  <th onClick={() => handleSort('load_time_ms')} style={{ cursor: 'pointer', minWidth: '100px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Snelheid {renderSortIcon('load_time_ms')}</div>
                   </th>
                 </tr>
@@ -296,8 +309,8 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
                           <span className="badge badge-warning">{page.status_code}</span>
                         )}
                       </td>
-                      <td style={{ fontWeight: 500, color: 'var(--primary)' }}>{page.url}</td>
-                      <td>
+                      <td style={{ fontWeight: 500, color: 'var(--primary)' }} title={page.url}>{page.url}</td>
+                      <td title={page.keywords || ''}>
                         {page.keywords ? (
                           <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
                             {page.keywords}
@@ -306,7 +319,7 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
                           <span style={{ color: 'var(--text-dim)' }}>-</span>
                         )}
                       </td>
-                      <td>{page.title || <span style={{ color: 'var(--danger)' }}>(Ontbreekt)</span>}</td>
+                      <td title={page.title || ''}>{page.title || <span style={{ color: 'var(--danger)' }}>(Ontbreekt)</span>}</td>
                       <td>
                         {page.title_length ? (
                           <span style={{ color: (page.title_length < 30 || page.title_length > 60) ? 'var(--warning)' : 'var(--text-main)' }}>
@@ -314,8 +327,8 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
                           </span>
                         ) : '-'}
                       </td>
-                      <td>{page.meta_description || <span style={{ color: 'var(--warning)' }}>(Ontbreekt)</span>}</td>
-                      <td>{page.h1 || <span style={{ color: 'var(--warning)' }}>(Geen H1)</span>}</td>
+                      <td title={page.meta_description || ''}>{page.meta_description || <span style={{ color: 'var(--warning)' }}>(Ontbreekt)</span>}</td>
+                      <td title={page.h1 || ''}>{page.h1 || <span style={{ color: 'var(--warning)' }}>(Geen H1)</span>}</td>
                       <td>
                         {page.images_missing_alt > 0 ? (
                           <span className="badge badge-warning">{page.images_missing_alt} zonder alt</span>

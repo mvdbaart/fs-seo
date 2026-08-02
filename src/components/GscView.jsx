@@ -12,9 +12,12 @@ import {
   CheckCircle2, 
   ArrowUpRight, 
   ShieldCheck,
+  ShieldOff,
   Target,
-  PlusCircle
+  PlusCircle,
+  Tag
 } from 'lucide-react';
+import { isBrandKeyword } from '../utils/brandFilter';
 
 export default function GscView({ projectId, activeProject }) {
   const [gscData, setGscData] = useState(null);
@@ -23,6 +26,7 @@ export default function GscView({ projectId, activeProject }) {
   const [imported, setImported] = useState(false);
   const [copiedCtr, setCopiedCtr] = useState(false);
   const [copiedPage2, setCopiedPage2] = useState(false);
+  const [hideBrand, setHideBrand] = useState(false);
 
   useEffect(() => {
     fetchGscData();
@@ -73,8 +77,15 @@ export default function GscView({ projectId, activeProject }) {
   if (loading && !gscData) return <div className="card">Laden van Google Search Console gegevens...</div>;
   if (!gscData) return null;
 
-  const { totals, ctrOpportunities, strikingDistance, indexationHealth, actionPlan, aiPrompts } = gscData;
+  const { totals, ctrOpportunities = [], strikingDistance = [], indexationHealth, actionPlan, aiPrompts } = gscData;
   const fmtNum = (v) => (v === null || v === undefined) ? '—' : v.toLocaleString('nl-NL');
+
+  const domain = activeProject?.domain || gscData.domain || '';
+  const businessName = activeProject?.name || '';
+  const isBrand = (kwStr) => isBrandKeyword(kwStr, domain, businessName);
+
+  const filteredCtrOpp = ctrOpportunities.filter(op => !hideBrand || !isBrand(op.keyword));
+  const filteredStriking = strikingDistance.filter(s => !hideBrand || !isBrand(s.keyword));
 
   return (
     <div>
@@ -117,6 +128,14 @@ export default function GscView({ projectId, activeProject }) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              className={`btn ${hideBrand ? 'btn-primary' : 'btn-secondary'}`} 
+              onClick={() => setHideBrand(!hideBrand)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {hideBrand ? <ShieldOff size={16} /> : <Tag size={16} />}
+              {hideBrand ? 'Merknamen Verborgen' : 'Verberg Merknamen'}
+            </button>
             <button className="btn btn-secondary" onClick={handleImportToRankTracker} disabled={importing}>
               {imported ? (
                 <>
@@ -187,7 +206,7 @@ export default function GscView({ projectId, activeProject }) {
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <TrendingUp size={20} color="var(--primary)" /> High Potential CTR Kansen (Hoge Vertoningen op Pagina 1)
           </span>
-          <span className="badge badge-success">{ctrOpportunities.length} kansen gevonden</span>
+          <span className="badge badge-success">{filteredCtrOpp.length} kansen gevonden</span>
         </h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
           Deze zoekwoorden staan al op pagina 1 in Google.nl (#1-#5), maar behalen een lage CTR (&lt; 3%). Herschrijf de Title & Meta Description om direct extra bezoekers te trekken.
@@ -206,16 +225,23 @@ export default function GscView({ projectId, activeProject }) {
               </tr>
             </thead>
             <tbody>
-              {ctrOpportunities.length === 0 && (
+              {filteredCtrOpp.length === 0 && (
                 <tr>
                   <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
                     Geen pagina 1 posities gevonden. Voer een ranking check uit in de Rank Tracker.
                   </td>
                 </tr>
               )}
-              {ctrOpportunities.map((op, i) => (
+              {filteredCtrOpp.map((op, i) => (
                 <tr key={i}>
-                  <td style={{ fontWeight: 700, color: 'var(--text-main)' }}>{op.keyword}</td>
+                  <td style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                    {op.keyword}
+                    {isBrand(op.keyword) && (
+                      <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 5px', marginLeft: '6px', opacity: 0.85 }}>
+                        Merknaam
+                      </span>
+                    )}
+                  </td>
                   <td>
                     {op.position.startsWith('#') ? (
                       <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--primary)' }}>
@@ -261,16 +287,23 @@ export default function GscView({ projectId, activeProject }) {
               </tr>
             </thead>
             <tbody>
-              {strikingDistance.length === 0 && (
+              {filteredStriking.length === 0 && (
                 <tr>
                   <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
                     Geen striking distance zoekwoorden gevonden.
                   </td>
                 </tr>
               )}
-              {strikingDistance.map((sd, i) => (
+              {filteredStriking.map((sd, i) => (
                 <tr key={i}>
-                  <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>{sd.keyword}</td>
+                  <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+                    {sd.keyword}
+                    {isBrand(sd.keyword) && (
+                      <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 5px', marginLeft: '6px', opacity: 0.85 }}>
+                        Merknaam
+                      </span>
+                    )}
+                  </td>
                   <td>
                     {sd.position.startsWith('#') ? (
                       <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--warning)' }}>

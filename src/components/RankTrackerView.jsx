@@ -16,11 +16,14 @@ import {
   Copy,
   Check,
   ShieldCheck,
+  ShieldOff,
   AlertTriangle,
-  History
+  History,
+  Tag
 } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { isBrandKeyword } from '../utils/brandFilter';
 
 export default function RankTrackerView({ projectId, activeProject }) {
   const [keywords, setKeywords] = useState([]);
@@ -60,6 +63,42 @@ export default function RankTrackerView({ projectId, activeProject }) {
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [sortField, setSortField] = useState('position');
   const [sortOrder, setSortOrder] = useState('asc');
+  const [hideBrandKeywords, setHideBrandKeywords] = useState(false);
+  const [deletingBrand, setDeletingBrand] = useState(false);
+
+  const domain = activeProject?.domain || '';
+  const businessName = activeProject?.name || '';
+
+  const isBrand = (kwStr) => isBrandKeyword(kwStr, domain, businessName);
+
+  const handleDeleteBrandKeywords = async () => {
+    const brandCount = keywords.filter(k => isBrand(k.keyword)).length;
+    if (brandCount === 0) {
+      alert('Geen merknaam zoekwoorden gevonden om te verwijderen.');
+      return;
+    }
+    if (!confirm(`Weet je zeker dat je alle ${brandCount} merknaam zoekwoorden definitief wilt verwijderen uit de rank tracker?`)) return;
+
+    setDeletingBrand(true);
+    try {
+      const res = await fetch('/api/keywords/delete-brand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: projectId || 1 })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`${data.deletedCount} merknaam zoekwoorden succesvol verwijderd.`);
+        fetchKeywords();
+      } else {
+        alert('Fout bij verwijderen: ' + (data.error || 'Onbekend'));
+      }
+    } catch (err) {
+      alert('Fout bij verwijderen merknamen: ' + err.message);
+    } finally {
+      setDeletingBrand(false);
+    }
+  };
 
   useEffect(() => {
     fetchKeywords();
@@ -148,6 +187,8 @@ export default function RankTrackerView({ projectId, activeProject }) {
                           (kw.target_url || '').toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
+    if (hideBrandKeywords && isBrand(kw.keyword)) return false;
+
     if (selectedRegion !== 'all' && kw.region !== selectedRegion) return false;
 
     if (activeFilter === 'top3') return kw.position > 0 && kw.position <= 3;
@@ -158,6 +199,9 @@ export default function RankTrackerView({ projectId, activeProject }) {
 
     return true;
   });
+
+  // Count brand keywords total
+  const brandKeywordsCount = keywords.filter(k => isBrand(k.keyword)).length;
 
   // Sort logic
   const sortedKeywords = [...filteredKeywords].sort((a, b) => {
@@ -263,50 +307,78 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <div className="stat-card">
           <div className="stat-header">Totaal Gemonitord</div>
-          <div className="stat-value">{keywords.length}</div>
+          <div className="stat-value">
+            {keywords.length}
+            {hideBrandKeywords && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px' }}>({keywords.length - brandKeywordsCount} ex. merk)</span>}
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-header">Top 3 Rankings</div>
           <div className="stat-value" style={{ color: 'var(--primary)' }}>
-            {keywords.filter(k => k.position > 0 && k.position <= 3).length}
+            {keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 3).length}
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-header">Top 10 Rankings</div>
           <div className="stat-value" style={{ color: 'var(--warning)' }}>
-            {keywords.filter(k => k.position > 0 && k.position <= 10).length}
+            {keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 10).length}
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-header">Niet in Top 100</div>
           <div className="stat-value" style={{ color: 'var(--danger)' }}>
-            {keywords.filter(k => k.position === 0).length}
+            {keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position === 0).length}
           </div>
         </div>
       </div>
 
-      {/* Filter Tabs & Search Bar */}
+      {/* Filter Tabs & Brand Controls & Search Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
           <button className={`tab-btn ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>
-            Alle ({keywords.length})
+            Alle ({keywords.filter(k => !hideBrandKeywords || !isBrand(k.keyword)).length})
           </button>
           <button className={`tab-btn ${activeFilter === 'top3' ? 'active' : ''}`} onClick={() => setActiveFilter('top3')}>
-            Top 3 ({keywords.filter(k => k.position > 0 && k.position <= 3).length})
+            Top 3 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 3).length})
           </button>
           <button className={`tab-btn ${activeFilter === 'top10' ? 'active' : ''}`} onClick={() => setActiveFilter('top10')}>
-            Top 10 ({keywords.filter(k => k.position > 0 && k.position <= 10).length})
+            Top 10 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 10).length})
           </button>
           <button className={`tab-btn ${activeFilter === 'unranked' ? 'active' : ''}`} onClick={() => setActiveFilter('unranked')}>
-            Niet in Top 100 ({keywords.filter(k => k.position === 0).length})
+            Niet in Top 100 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position === 0).length})
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Brand Filter Toggle Button */}
+          <button 
+            className={`btn ${hideBrandKeywords ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => setHideBrandKeywords(!hideBrandKeywords)}
+            title={hideBrandKeywords ? "Toon alle zoekwoorden inclusief merknamen" : "Verberg merknaam zoekwoorden uit de lijst"}
+          >
+            {hideBrandKeywords ? <ShieldOff size={15} /> : <Tag size={15} />}
+            {hideBrandKeywords ? 'Merknamen Verborgen' : 'Verberg Merknamen'}
+          </button>
+
+          {/* Bulk Delete Brand Keywords Button */}
+          {brandKeywordsCount > 0 && (
+            <button 
+              className="btn btn-danger"
+              style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={handleDeleteBrandKeywords}
+              disabled={deletingBrand}
+              title="Verwijder alle merknaam zoekwoorden definitief uit de database"
+            >
+              <Trash2 size={15} />
+              {deletingBrand ? 'Opschonen...' : `Schoon Merknamen Op (${brandKeywordsCount})`}
+            </button>
+          )}
+
           {uniqueRegions.length > 0 && (
             <select 
               className="input-field" 
-              style={{ width: '150px', padding: '6px 10px', fontSize: '0.85rem' }}
+              style={{ width: '140px', padding: '6px 10px', fontSize: '0.85rem' }}
               value={selectedRegion}
               onChange={(e) => setSelectedRegion(e.target.value)}
             >
@@ -317,7 +389,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
             </select>
           )}
 
-          <div style={{ position: 'relative', width: '220px' }}>
+          <div style={{ position: 'relative', width: '200px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input 
               type="text"
@@ -373,9 +445,14 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                   <React.Fragment key={kw.id}>
                   <tr>
                     <td style={{ fontWeight: 600, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => toggleHistory(kw.id)}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <History size={13} color={expandedId === kw.id ? 'var(--primary)' : 'var(--text-dim)'} />
                         {kw.keyword}
+                        {isBrand(kw.keyword) && (
+                          <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 5px', opacity: 0.85 }}>
+                            Merknaam
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td>

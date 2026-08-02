@@ -36,7 +36,15 @@ export default function PageSpeedView({ projectId, projectDomain }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: projectId || 1, url, strategy })
       });
-      const data = await res.json();
+      
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error('De server stuurde geen geldige JSON (mogelijk een netwerk- of proxytimeout van 90 seconden).');
+      }
+
       if (!res.ok) {
         alert(data.error || 'PageSpeed audit mislukt');
         return;
@@ -180,33 +188,41 @@ export default function PageSpeedView({ projectId, projectDomain }) {
           </div>
 
           {/* Diagnostic Opportunities */}
-          <div className="card">
-            <h3 className="card-title">
-              <Cpu size={18} color="var(--primary)" /> Aanbevolen Snelheidsoptimalisaties
-            </h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
-              {auditData.diagnostics && auditData.diagnostics.length > 0 ? (
-                auditData.diagnostics.map((diag, idx) => (
-                  <div key={idx} style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--warning)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <strong style={{ fontSize: '0.95rem' }}>{diag.title}</strong>
-                      <span className="badge badge-warning">{diag.displayValue || 'Optimaliseerbaar'}</span>
+          {(() => {
+            const diagnosticsList = Array.isArray(auditData.diagnostics)
+              ? auditData.diagnostics
+              : (typeof auditData.diagnostics === 'string' ? JSON.parse(auditData.diagnostics || '[]') : []);
+
+            return (
+              <div className="card">
+                <h3 className="card-title">
+                  <Cpu size={18} color="var(--primary)" /> Aanbevolen Snelheidsoptimalisaties
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  {diagnosticsList.length > 0 ? (
+                    diagnosticsList.map((diag, idx) => (
+                      <div key={idx} style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', borderLeft: '4px solid var(--warning)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <strong style={{ fontSize: '0.95rem' }}>{diag.title}</strong>
+                          <span className="badge badge-warning">{diag.displayValue || 'Optimaliseerbaar'}</span>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{diag.description}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                      ✓ Er zijn geen grote vertragende elementen gevonden op deze pagina.
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{diag.description}</p>
-                  </div>
-                ))
-              ) : (
-                <div style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                  ✓ Er zijn geen grote vertragende elementen gevonden op deze pagina.
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            );
+          })()}
 
           <AiPromptCanvas
             title="AI Prompt: PageSpeed & Core Web Vitals Optimalisatie"
-            promptText={`Je bent een Senior Frontend & Web Performance Engineer. Hier zijn de live Google PageSpeed Insights resultaten voor ${url} (${strategy}):\n\n- Performance Score: ${auditData.performance_score}/100\n- LCP (Largest Contentful Paint): ${auditData.lcp}\n- CLS (Cumulative Layout Shift): ${auditData.cls}\n- INP / FID: ${auditData.inp}\n- FCP: ${auditData.fcp}\n\nBelangrijkste vertragingsdiagnoses:\n${(auditData.diagnostics || []).map(d => `- ${d.title}: ${d.description}`).join('\n')}\n\nOpdracht:\n1. Geef concrete codevoorbeelden (CSS/HTML/JS) om de LCP en CLS scores op deze pagina direct te verbeteren.\n2. Geef aan welke afbeeldingen of scripts uitgesteld (deferred/async) moeten worden.\n3. Schrijf een stappenplan voor caching en resource inladen.`}
+            promptText={`Je bent een Senior Frontend & Web Performance Engineer. Hier zijn de live Google PageSpeed Insights resultaten voor ${url} (${strategy}):\n\n- Performance Score: ${auditData.performance_score}/100\n- LCP (Largest Contentful Paint): ${auditData.lcp}\n- CLS (Cumulative Layout Shift): ${auditData.cls}\n- INP / FID: ${auditData.inp}\n- FCP: ${auditData.fcp}\n\nBelangrijkste vertragingsdiagnoses:\n${(Array.isArray(auditData.diagnostics) ? auditData.diagnostics : JSON.parse(auditData.diagnostics || '[]')).map(d => `- ${d.title}: ${d.description}`).join('\n')}\n\nOpdracht:\n1. Geef concrete codevoorbeelden (CSS/HTML/JS) om de LCP en CLS scores op deze pagina direct te verbeteren.\n2. Geef aan welke afbeeldingen of scripts uitgesteld (deferred/async) moeten worden.\n3. Schrijf een stappenplan voor caching en resource inladen.`}
           />
         </>
       ) : (

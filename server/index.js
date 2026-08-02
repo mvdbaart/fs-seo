@@ -18,6 +18,8 @@ const {
   getInternalLinkMatrix, 
   getCompetitorGapAnalysis 
 } = require('./services/seoToolsService');
+const { getTopicClusters } = require('./services/pillarClusterService');
+const { isBrandKeyword } = require('./utils/brandFilter');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -179,6 +181,42 @@ app.get('/api/projects/:id/competitor-gap', (req, res) => {
   try {
     const data = getCompetitorGapAnalysis(req.params.id);
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/projects/:id/topic-clusters', (req, res) => {
+  try {
+    const data = getTopicClusters(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/:id/topic-clusters', (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const { title, pillarUrl, keywords } = req.body;
+    if (!title || !pillarUrl) {
+      return res.status(400).json({ error: 'Titel en Pillar URL zijn verplicht.' });
+    }
+    const result = db.prepare(`
+      INSERT INTO custom_topic_clusters (project_id, title, pillar_url, keywords)
+      VALUES (?, ?, ?, ?)
+    `).run(projectId, title, pillarUrl, keywords || '');
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/topic-clusters/:clusterId', (req, res) => {
+  try {
+    db.prepare('DELETE FROM custom_topic_clusters WHERE id = ?').run(req.params.clusterId);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -674,6 +712,32 @@ app.delete('/api/keywords/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM keywords WHERE id = ?').run(req.params.id);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verwijder alle merknaam zoekwoorden in bulk voor een project
+app.post('/api/keywords/delete-brand', (req, res) => {
+  try {
+    const { projectId = 1 } = req.body;
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    if (!project) return res.status(404).json({ error: 'Project niet gevonden' });
+
+    const businessNameRow = db.prepare("SELECT value FROM settings WHERE key = 'business_name'").get();
+    const businessName = businessNameRow ? businessNameRow.value : project.name;
+
+    const allKeywords = db.prepare('SELECT id, keyword FROM keywords WHERE project_id = ?').all(projectId);
+    const brandIds = allKeywords
+      .filter(k => isBrandKeyword(k.keyword, project.domain, businessName))
+      .map(k => k.id);
+
+    if (brandIds.length > 0) {
+      const deleteStmt = db.prepare(`DELETE FROM keywords WHERE id IN (${brandIds.map(() => '?').join(',')})`);
+      deleteStmt.run(...brandIds);
+    }
+
+    res.json({ success: true, deletedCount: brandIds.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

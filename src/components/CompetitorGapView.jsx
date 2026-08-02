@@ -83,11 +83,16 @@ export default function CompetitorGapView({ projectId }) {
 
       {/* Keyword Cannibalization Detector */}
       <div className="card">
-        <h3 className="card-title" style={{ color: 'var(--warning)' }}>
-          <AlertTriangle size={20} /> Gedetecteerde Content Cannibalisatie (Interne Concurrentie)
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <h3 className="card-title" style={{ color: 'var(--warning)', margin: 0 }}>
+            <AlertTriangle size={20} /> Gedetecteerde Content Cannibalisatie (Interne Concurrentie)
+          </h3>
+          <span className="badge badge-info" style={{ fontSize: '0.75rem', gap: '4px' }}>
+            ✓ Merknaam-zoekwoorden automatisch gefilterd
+          </span>
+        </div>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
-          Dit treedt op wanneer 2 of meer eigen pagina's concurreren om hetzelfde zoekwoord in Google.nl.
+          Dit treedt op wanneer 2 of meer eigen pagina's concurreren om hetzelfde zoekwoord in Google.nl. Merknaam zoekwoorden worden automatisch gefilterd omdat het normaal is dat meerdere pagina's ranken op je eigen bedrijfsnaam.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

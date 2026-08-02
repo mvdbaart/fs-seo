@@ -81,9 +81,9 @@ export default function LocalPackView({ projectId, activeProject }) {
           </p>
 
           <div style={{ background: '#ffffff', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '12px', fontSize: '0.85rem' }}>
-            <strong>🔑 Service Account e-mailadres:</strong> <code style={{ color: 'var(--primary)' }}>{data.gbp.serviceAccountEmail}</code>
+            <strong>🔑 Uitnodiging & Koppeling:</strong>
             <p style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-              Stappen om live te verbinden: Ga naar <a href="https://business.google.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>business.google.com</a> ➔ <strong>Instellingen ➔ Gebruikers ➔ Toevoegen</strong> ➔ Geef bovenstaand e-mailadres de rol <em>Beheerder / Manager</em>.
+              Ga op Google naar je beheerpaneel ➔ <strong>3 stipjes (⋮) ➔ Instellingen voor Bedrijfsprofiel ➔ Mensen en toegang</strong> ➔ Nodig je e-mailadres (bijv. <code>mvdbaart@gmail.com</code>) uit als <em>Beheerder / Manager</em> om de koppeling te voltooien.
             </p>
           </div>
 

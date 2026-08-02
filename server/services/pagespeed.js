@@ -12,7 +12,7 @@ async function runPageSpeedAudit(targetUrl, strategy = 'mobile') {
       apiUrl += `&key=${apiKey}`;
     }
 
-    const response = await axios.get(apiUrl, { timeout: 25000 });
+    const response = await axios.get(apiUrl, { timeout: 90000 });
     const data = response.data;
 
     const lighthouse = data.lighthouseResult;
