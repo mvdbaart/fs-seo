@@ -27,6 +27,19 @@ export default function AiPromptCanvas({
   const [showResult, setShowResult] = useState(true);
   const [blogPushLoading, setBlogPushLoading] = useState(false);
   const [blogPushResult, setBlogPushResult] = useState(null);
+  const [editedText, setEditedText] = useState('');
+
+  useEffect(() => {
+    if (aiResult?.generatedText) {
+      setEditedText(aiResult.generatedText);
+    }
+  }, [aiResult]);
+
+  const isBlogPrompt = promptId?.toLowerCase().includes('blog') || 
+                       promptId?.toLowerCase().includes('article') || 
+                       promptId?.toLowerCase().includes('content_optimizer') ||
+                       title?.toLowerCase().includes('blog') || 
+                       title?.toLowerCase().includes('artikel');
 
   useEffect(() => {
     try {
