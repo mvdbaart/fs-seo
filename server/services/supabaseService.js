@@ -36,31 +36,107 @@ async function fetchSupabasePages() {
 }
 
 /**
- * Synchroniseer een gegenereerde SEO Title, Meta Description of AI Prompt naar Supabase
+ * Push een AI-gegenereerd artikel direct als concept naar marketing_content_items in fs-next Supabase
  */
-async function syncSeoMetadataToSupabase({ pageUrl, keyword, title, metaDescription, aiPrompt, status = 'optimized' }) {
+async function pushBlogPostToSupabase({ title, slug, metaDescription, content, targetKeywords, status = 'draft' }) {
   const supabase = getSupabaseClient();
-  if (!supabase) throw new Error('Supabase is niet geconfigureerd');
+  if (!supabase) throw new Error('Supabase is niet geconfigureerd in .env.local');
+
+  const cleanSlug = slug || (title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : `seo-article-${Date.now()}`);
 
   const payload = {
-    url: pageUrl,
-    target_keyword: keyword,
-    seo_title: title,
-    meta_description: metaDescription,
-    ai_prompt: aiPrompt,
+    title: title || 'Nieuw SEO Artikel',
+    slug: cleanSlug,
+    meta_description: metaDescription || '',
+    content: content || '',
+    target_keywords: targetKeywords || [],
     status: status,
+    content_type: 'blog_post',
+    published_at: null,
+    created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 
-  const { data, error } = await supabase
-    .from('seo_metadata')
-    .upsert(payload, { onConflict: 'url' });
+  // Probeer marketing_content_items (de primaire tabel in fs-next)
+  const { data: blogData, error: err1 } = await supabase
+    .from('marketing_content_items')
+    .upsert(payload, { onConflict: 'slug' })
+    .select();
 
-  if (error) {
-    throw new Error(`Supabase Upsert Fout: ${error.message}`);
+  if (!err1 && blogData) {
+    return { success: true, table: 'marketing_content_items', slug: cleanSlug, data: blogData[0] };
   }
 
-  return data;
+  // Fallback naar blog_posts tabel indien aanwezig
+  const { data: altData, error: err2 } = await supabase
+    .from('blog_posts')
+    .upsert({
+      title: payload.title,
+      slug: payload.slug,
+      meta_description: payload.meta_description,
+      body: payload.content,
+      is_published: false,
+      created_at: payload.created_at
+    }, { onConflict: 'slug' })
+    .select();
+
+  if (!err2 && altData) {
+    return { success: true, table: 'blog_posts', slug: cleanSlug, data: altData[0] };
+  }
+
+  throw new Error(`Supabase Blog Push Fout: ${err1?.message || err2?.message || 'Onbekende fout'}`);
 }
 
-module.exports = { isSupabaseConfigured, fetchSupabasePages, syncSeoMetadataToSupabase };
+/**
+ * Haal alle actieve cursuscategorieën & varianten op uit Supabase voor live keyword/URL sync
+ */
+async function fetchCourseCategoriesFromSupabase() {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase is niet geconfigureerd in .env.local');
+
+  const { data: categories, error: catErr } = await supabase
+    .from('course_categories')
+    .select('id, keyword, display_name, slug, categorie, soob_subsidie, soob_subsidie_bedrag, code95_hours, normale_prijs')
+    .eq('is_active', true);
+
+  if (catErr) {
+    throw new Error(`Fout bij ophalen cursuscategorieën uit Supabase: ${catErr.message}`);
+  }
+
+  const { data: variants } = await supabase
+    .from('course_category_variants')
+    .select('id, category_id, title, keyword, seo_url, price, soob_subsidie_bedrag, code95_hours')
+    .eq('is_active', true);
+
+  const formattedCourses = (categories || []).map(cat => {
+    const catVariants = (variants || []).filter(v => v.category_id === cat.id);
+    const targetUrl = cat.slug ? `https://frissestart.nl/${cat.slug.replace(/^\//, '')}` : 'https://frissestart.nl/opleidingen';
+    
+    return {
+      id: cat.id,
+      keyword: cat.display_name || cat.keyword,
+      categoryKeyword: cat.keyword,
+      targetUrl,
+      code95Hours: cat.code95_hours || 0,
+      soobSubsidie: cat.soob_subsidie || false,
+      soobBedrag: cat.soob_subsidie_bedrag || 0,
+      normalePrijs: cat.normale_prijs || 0,
+      variants: catVariants.map(v => ({
+        title: v.title,
+        keyword: v.keyword,
+        seoUrl: v.seo_url ? `https://frissestart.nl/${v.seo_url.replace(/^\//, '')}` : targetUrl,
+        price: v.price
+      }))
+    };
+  });
+
+  return formattedCourses;
+}
+
+module.exports = { 
+  isSupabaseConfigured, 
+  fetchSupabasePages, 
+  syncSeoMetadataToSupabase,
+  pushBlogPostToSupabase,
+  fetchCourseCategoriesFromSupabase
+};

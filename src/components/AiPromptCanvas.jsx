@@ -25,6 +25,8 @@ export default function AiPromptCanvas({
   const [aiStyle, setAiStyle] = useState('default');
   const [aiResult, setAiResult] = useState(null);
   const [showResult, setShowResult] = useState(true);
+  const [blogPushLoading, setBlogPushLoading] = useState(false);
+  const [blogPushResult, setBlogPushResult] = useState(null);
 
   useEffect(() => {
     try {
@@ -268,7 +270,35 @@ export default function AiPromptCanvas({
               <span>Gegenereerd met {aiResult.provider}</span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!aiResult?.generatedText) return;
+                  setBlogPushLoading(true);
+                  try {
+                    const res = await axios.post('/api/supabase/push-blog', {
+                      title: title || 'AI Gegenereerd Artikel',
+                      content: aiResult.generatedText,
+                      metaDescription: aiResult.generatedText.slice(0, 150).replace(/[\r\n]+/g, ' '),
+                      status: 'draft'
+                    });
+                    setBlogPushResult({ success: true, message: `Opgeslagen als concept (${res.data.table})` });
+                  } catch (err) {
+                    setBlogPushResult({ success: false, message: err.response?.data?.error || err.message });
+                  } finally {
+                    setBlogPushLoading(false);
+                  }
+                }}
+                disabled={blogPushLoading}
+                className="btn btn-sm btn-secondary"
+                style={{ fontSize: '0.78rem', background: '#059669', borderColor: '#059669', color: '#ffffff', fontWeight: 600 }}
+              >
+                {blogPushLoading ? <RefreshCw size={14} className="spin" /> : <Send size={14} />}
+                {blogPushLoading ? 'Pushen...' : '🚀 Push naar fs-next Blog (Concept)'}
+              </button>
+
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleCopyResultText(); }}
@@ -284,18 +314,32 @@ export default function AiPromptCanvas({
           </div>
 
           {showResult && (
-            <div style={{
-              padding: '16px',
-              background: '#ffffff',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.85rem',
-              lineHeight: 1.6,
-              color: '#1e293b',
-              whiteSpace: 'pre-wrap',
-              maxHeight: '350px',
-              overflowY: 'auto'
-            }}>
-              {aiResult.generatedText}
+            <div style={{ padding: '16px', background: '#ffffff' }}>
+              {blogPushResult && (
+                <div style={{
+                  marginBottom: '12px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  background: blogPushResult.success ? '#d1fae5' : '#fee2e2',
+                  color: blogPushResult.success ? '#065f46' : '#991b1b',
+                  border: `1px solid ${blogPushResult.success ? '#10b981' : '#f87171'}`
+                }}>
+                  {blogPushResult.success ? `✓ ${blogPushResult.message}` : `⚠ ${blogPushResult.message}`}
+                </div>
+              )}
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.85rem',
+                lineHeight: 1.6,
+                color: '#1e293b',
+                whiteSpace: 'pre-wrap',
+                maxHeight: '350px',
+                overflowY: 'auto'
+              }}>
+                {aiResult.generatedText}
+              </div>
             </div>
           )}
         </div>

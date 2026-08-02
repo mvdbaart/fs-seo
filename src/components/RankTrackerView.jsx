@@ -256,17 +256,44 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
             <Search size={20} color="var(--primary)" /> Live Dutch Keyword Rank Tracker (Google.nl vanaf Geldrop / Nuenen)
           </span>
 
-          <button className="btn btn-primary" onClick={handleCheckRankings} disabled={checking}>
-            {checking ? (
-              <>
-                <RefreshCw size={16} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Controleren op Google.nl...
-              </>
-            ) : (
-              <>
-                <RefreshCw size={16} /> Check Live Rankings Nu
-              </>
-            )}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/supabase/import-course-keywords', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectId })
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    alert(`✓ Succesvol ${data.imported} cursus-zoekwoorden & URL's geïmporteerd uit Supabase!`);
+                    fetchKeywords();
+                  } else {
+                    alert(`Fout: ${data.error}`);
+                  }
+                } catch (e) {
+                  alert(`Fout bij importeren uit Supabase: ${e.message}`);
+                }
+              }}
+              style={{ background: '#059669', color: '#ffffff', borderColor: '#059669' }}
+            >
+              <RefreshCw size={16} /> Sync Cursussen uit Supabase
+            </button>
+
+            <button className="btn btn-primary" onClick={handleCheckRankings} disabled={checking}>
+              {checking ? (
+                <>
+                  <RefreshCw size={16} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Controleren op Google.nl...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} /> Check Live Rankings Nu
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleAddKeyword} className="input-group" style={{ marginBottom: 0 }}>

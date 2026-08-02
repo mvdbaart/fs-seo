@@ -21,7 +21,12 @@ const {
 const { getTopicClusters } = require('./services/pillarClusterService');
 const { isBrandKeyword } = require('./utils/brandFilter');
 const { publishUrl, getUrlStatus } = require('./services/googleIndexingService');
-const { isSupabaseConfigured, syncSeoMetadataToSupabase } = require('./services/supabaseService');
+const { 
+  isSupabaseConfigured, 
+  syncSeoMetadataToSupabase, 
+  pushBlogPostToSupabase, 
+  fetchCourseCategoriesFromSupabase 
+} = require('./services/supabaseService');
 const { generateAiContent } = require('./services/aiGenerator');
 
 const app = express();
@@ -67,6 +72,56 @@ app.post('/api/supabase/sync', async (req, res) => {
     const { pageUrl, keyword, title, metaDescription, aiPrompt, status } = req.body;
     const result = await syncSeoMetadataToSupabase({ pageUrl, keyword, title, metaDescription, aiPrompt, status });
     res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/supabase/push-blog', async (req, res) => {
+  try {
+    const { title, slug, metaDescription, content, targetKeywords, status = 'draft' } = req.body;
+    const result = await pushBlogPostToSupabase({ title, slug, metaDescription, content, targetKeywords, status });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/supabase/courses', async (req, res) => {
+  try {
+    const courses = await fetchCourseCategoriesFromSupabase();
+    res.json({ success: true, count: courses.length, courses });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/supabase/import-course-keywords', async (req, res) => {
+  try {
+    const { projectId = 1 } = req.body;
+    const courses = await fetchCourseCategoriesFromSupabase();
+    const insertStmt = db.prepare('INSERT OR IGNORE INTO keywords (project_id, keyword, target_url, region, language) VALUES (?, ?, ?, ?, ?)');
+    
+    let imported = 0;
+    const transaction = db.transaction((list) => {
+      for (const item of list) {
+        if (item.keyword && item.targetUrl) {
+          insertStmt.run(projectId, item.keyword, item.targetUrl, 'Geldrop, Netherlands', 'nl');
+          imported++;
+        }
+        if (item.variants && item.variants.length > 0) {
+          for (const v of item.variants) {
+            if (v.keyword && v.seoUrl) {
+              insertStmt.run(projectId, v.keyword, v.seoUrl, 'Geldrop, Netherlands', 'nl');
+              imported++;
+            }
+          }
+        }
+      }
+    });
+    transaction(courses);
+
+    res.json({ success: true, imported, totalCategories: courses.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
