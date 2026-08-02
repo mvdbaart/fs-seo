@@ -62,9 +62,10 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
             </p>
           </div>
 
-          <button className="btn btn-primary" onClick={fetchAnalyticsData} disabled={loading}>
+          <button className={`btn btn-primary ${loading ? 'btn-progress-container' : ''}`} onClick={fetchAnalyticsData} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Vernieuw Analytics
+            {loading ? 'Ophalen & Analyseren...' : 'Vernieuw Analytics'}
+            {loading && <div className="btn-progress-bar" />}
           </button>
         </div>
       </div>

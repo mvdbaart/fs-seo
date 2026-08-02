@@ -222,6 +222,34 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 4px;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes btnProgressAnim {
+  0% { width: 5%; }
+  30% { width: 40%; }
+  70% { width: 75%; }
+  90% { width: 92%; }
+  100% { width: 98%; }
+}
+
+.btn-progress-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+  animation: btnProgressAnim 1.8s ease-in-out infinite;
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;

@@ -133,9 +133,10 @@ export default function GscView({ projectId, activeProject }) {
               )}
             </button>
 
-            <button className="btn btn-primary" onClick={fetchGscData} disabled={loading}>
+            <button className={`btn btn-primary ${loading ? 'btn-progress-container' : ''}`} onClick={fetchGscData} disabled={loading}>
               <RefreshCw size={16} className={loading ? 'spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
               {loading ? 'Verbinding Testen...' : '🧪 Test GSC Verbinding'}
+              {loading && <div className="btn-progress-bar" />}
             </button>
           </div>
         </div>
