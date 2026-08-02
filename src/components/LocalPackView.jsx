@@ -11,6 +11,7 @@ import {
   Phone, 
   Navigation
 } from 'lucide-react';
+import AiPromptCanvas from './AiPromptCanvas';
 
 export default function LocalPackView({ projectId, activeProject }) {
   const [data, setData] = useState(null);
@@ -195,6 +196,51 @@ export default function LocalPackView({ projectId, activeProject }) {
           {reviewTemplate}
         </div>
       </div>
+
+      {/* Actieplan & AI Prompt Canvas voor Google Maps Top 3 */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <h3 className="card-title" style={{ color: 'var(--primary)' }}>
+          🚀 Stappenplan: Hoe kom je wél in de Google Maps Top 3 (Local Pack)?
+        </h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
+          Omdat je organisch al op #1 staat, is de stap naar het Google Maps kaartje heel dichtbij. Google gebruikt 4 specifieke pijlers om je bedrijf in de Maps Top 3 te plaatsen:
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>1. Google Reviews met Zoekwoorden & Locatie</strong>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Vraag tevreden cursisten om in hun review expliciet de dienst + plaats te noemen (bijv. <em>"Top heftruckcursus gevolgd bij FrisseStart in Geldrop!"</em>). Google's algoritme leest de woorden in reviews om je te matchen.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>2. Google Bedrijfsprofiel Categorieën & Posts</strong>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Zorg dat je hoofdcategorie in Google Bedrijfsprofiel staat op <strong>"Opleidingscentrum"</strong> of <strong>"Rijschool"</strong>, met secundaire categorieën zoals <em>"Veiligheidsadviseur"</em>. Plaats elke maand 1 korte update-post op je profiel.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>3. Identieke NAP-gegevens op Top 10 Citations</strong>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Vul je Naam, Adres en Telefoonnummer (NAP) exact identiek in op <strong>De Telefoongids, Telefoonboek.nl, Drimble en Bing Places</strong>. Als adres/telefoonnummer overal matchen, stijgt het vertrouwen van Google.
+            </p>
+          </div>
+
+          <div style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+            <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>4. LocalBusiness Schema Markup op de Website</strong>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Voeg de geautomatiseerde <code>LocalBusiness</code> JSON-LD code (uit de tab <strong>Schema.org Generator</strong>) toe aan de homepage van frissestart.nl om je fysieke adres direct te koppelen aan je domein.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <AiPromptCanvas
+        title="AI Prompt: Google Maps Top 3 & Local Pack Optimalisatie"
+        promptText={`Je bent een Senior Local SEO & Google Maps Specialist. Ons bedrijf ${napInfo.name} (${activeProject?.domain || 'frissestart.nl'}) staat organisch al op #1 in Google.nl, maar we verschijnen nog niet in de Google Maps 3-Pack (Local Pack) voor onze regio's (${localRankings.map(r => r.city).join(', ')}).\n\nHuidige NAP Gegevens:\n- Bedrijfsnaam: ${napInfo.name}\n- Adres: ${napInfo.address}\n- Telefoonnummer: ${napInfo.phone}\n\nOpdracht:\n1. Schrijf een strategie om het Google Bedrijfsprofiel (voormalig Google Mijn Bedrijf) optimaal in te richten met de juiste hoofdcategorie en secundaire categorieën voor heftruck-, reachtruck- en veiligheidscursussen.\n2. Schrijf 3 wervende updates/posts die we wekelijks kunnen plaatsen op ons Google Bedrijfsprofiel met lokale zoekwoorden.\n3. Schrijf 5 voorbeelden van reviews met lokale zoekwoorden die we als inspiratie naar cursisten kunnen sturen.`}
+      />
     </div>
   );
 }
