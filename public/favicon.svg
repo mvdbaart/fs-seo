@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#059669"/>
+  <!-- Magnifying glass outline -->
+  <circle cx="28" cy="28" r="14" fill="none" stroke="#ffffff" stroke-width="4.5"/>
+  <line x1="38" y1="38" x2="50" y2="50" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  <!-- Rising SEO chart bars inside lens -->
+  <rect x="20" y="31" width="3" height="5" fill="#34d399" rx="1"/>
+  <rect x="25" y="26" width="3" height="10" fill="#34d399" rx="1"/>
+  <rect x="30" y="20" width="3" height="16" fill="#34d399" rx="1"/>
+  <!-- Trend arrow pointing up -->
+  <path d="M 19 25 L 33 17 M 33 17 L 27 17 M 33 17 L 33 23" fill="none" stroke="#f18b1a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
