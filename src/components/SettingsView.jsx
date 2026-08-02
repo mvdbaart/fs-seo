@@ -409,13 +409,17 @@ export default function SettingsView({ activeProject, onProjectChange }) {
               </summary>
               <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px', lineHeight: 1.5, color: 'var(--text-muted)' }}>
                 <div>
-                  <strong style={{ color: 'var(--text-main)' }}>1. GitHub Personal Access Token (PAT):</strong>
-                  <ol style={{ paddingLeft: '20px', marginTop: '4px' }}>
-                    <li>Ga in GitHub naar <strong>Settings ➔ Developer settings ➔ Personal access tokens ➔ Tokens (classic)</strong>.</li>
-                    <li>Klik op <strong>Generate new token (classic)</strong>.</li>
-                    <li>Vink minstens <code>repo</code> (Full control of private repositories) aan.</li>
-                    <li>Kopieer de token (begint met <code>ghp_</code> of <code>github_pat_</code>) en plak hem in het veld hierboven.</li>
-                  </ol>
+                  <strong style={{ color: 'var(--text-main)' }}>1. GitHub Personal Access Token (PAT) Rechten (Permissions):</strong>
+                  <div style={{ marginTop: '4px' }}>
+                    <p>Afhankelijk van het type token dat je aanmaakt in GitHub:</p>
+                    <ul style={{ paddingLeft: '20px', marginTop: '4px' }}>
+                      <li><strong>Fine-grained token (Aanbevolen):</strong> Selecteer de <code>FrisseStart/fs-next</code> repository en stel bij <strong>Repository permissions</strong> in:
+                        <br />- <code>Contents</code> ➔ <strong>Read and Write</strong> (om bestanden te lezen en SEO-commits te maken)
+                        <br />- <code>Metadata</code> ➔ <strong>Read-only</strong> (wordt automatisch geselecteerd)
+                      </li>
+                      <li style={{ marginTop: '6px' }}><strong>Tokens (classic):</strong> Vink simpelweg het vinkje <strong><code>repo</code></strong> aan (geeft volledige toegang tot lezen en committen op private repositories).</li>
+                    </ul>
+                  </div>
                 </div>
 
                 <div>
