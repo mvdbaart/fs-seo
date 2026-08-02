@@ -53,14 +53,19 @@ function getLocalPackAudit(projectId) {
     return { city: regionName, localPackCount, totalKeywords: rows.length, bestOrganic, status };
   }).filter(r => r.totalKeywords > 0 || geoRows.length === 0);
 
-  // Citations kunnen niet automatisch geverifieerd worden: presenteer als checklist.
+  // Citations worden gepresenteerd op basis van Nederlandse autoriteit & gratis registratie.
   const bareDomain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const citations = [
-    { source: 'Google Bedrijfsprofiel (Google Maps)', checkUrl: `https://www.google.com/maps/search/${encodeURIComponent(napInfo.name)}`, verified: null },
-    { source: 'KvK Register', checkUrl: `https://www.kvk.nl/zoeken/?source=all&q=${encodeURIComponent(napInfo.name)}`, verified: null },
-    { source: 'De Telefoongids', checkUrl: `https://www.detelefoongids.nl/${encodeURIComponent(napInfo.name)}/zoeken/`, verified: null },
-    { source: 'Bing Places', checkUrl: `https://www.bing.com/maps?q=${encodeURIComponent(napInfo.name)}`, verified: null },
-    { source: 'Drimble', checkUrl: `https://drimble.nl/zoek.html?q=${encodeURIComponent(bareDomain)}`, verified: null }
+    { source: 'Google Bedrijfsprofiel (Google Maps)', category: 'Essentieel (Nr. 1)', checkUrl: `https://www.google.com/maps/search/${encodeURIComponent(napInfo.name)}`, verified: null },
+    { source: 'De Telefoongids / Gouden Gids (detelefoongids.nl)', category: 'Hoge Autoriteit', checkUrl: `https://www.detelefoongids.nl/${encodeURIComponent(napInfo.name)}/zoeken/`, verified: null },
+    { source: 'Telefoonboek.nl / Openingstijden.nl', category: 'Veelgebruikt NL', checkUrl: `https://www.telefoonboek.nl/zoeken/${encodeURIComponent(napInfo.name)}/`, verified: null },
+    { source: 'Bing Places for Business', category: 'Search Engine', checkUrl: `https://www.bing.com/maps?q=${encodeURIComponent(napInfo.name)}`, verified: null },
+    { source: 'Apple Maps Connect', category: 'Navigation & Voice', checkUrl: `https://mapsconnect.apple.com/`, verified: null },
+    { source: 'Drimble.nl (Bedrijfsprofielen & KvK)', category: 'Goede Indexatie', checkUrl: `https://drimble.nl/zoek.html?q=${encodeURIComponent(bareDomain)}`, verified: null },
+    { source: 'AlleBedrijvenIn.nl', category: 'Regionale Gids', checkUrl: `https://www.allebedrijvenin.nl/zoeken/${encodeURIComponent(napInfo.name)}`, verified: null },
+    { source: 'Cylex Bedrijvengids Nederland', category: 'Internationaal / NL', checkUrl: `https://www.cylex-bedrijvengids.nl/s?q=${encodeURIComponent(napInfo.name)}`, verified: null },
+    { source: 'Hotfrog Nederland', category: 'Snelle Indexatie', checkUrl: `https://www.hotfrog.nl/search/nl/${encodeURIComponent(napInfo.name)}`, verified: null },
+    { source: 'Yelp Nederland', category: 'Reviews & Autoriteit', checkUrl: `https://www.yelp.nl/search?find_desc=${encodeURIComponent(napInfo.name)}`, verified: null }
   ];
 
   const actionItems = [];

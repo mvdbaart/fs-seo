@@ -147,9 +147,16 @@ export default function LocalPackView({ projectId, activeProject }) {
             </p>
             {citations.map((c, i) => (
               <div key={i} style={{ padding: '10px 14px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong>{c.source}</strong>
-                <a href={c.checkUrl} target="_blank" rel="noreferrer" className="badge badge-info" style={{ textDecoration: 'none' }}>
-                  Controleer vermelding →
+                <div>
+                  <strong>{c.source}</strong>
+                  {c.category && (
+                    <span className="badge badge-info" style={{ marginLeft: '8px', fontSize: '0.68rem' }}>
+                      {c.category}
+                    </span>
+                  )}
+                </div>
+                <a href={c.checkUrl} target="_blank" rel="noreferrer" className="badge badge-success" style={{ textDecoration: 'none' }}>
+                  Controleer / Registreer →
                 </a>
               </div>
             ))}
