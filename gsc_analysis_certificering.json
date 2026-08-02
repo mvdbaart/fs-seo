@@ -1,0 +1,94 @@
+{
+  "domain": "frissestart.nl",
+  "location": "Geldrop, Netherlands",
+  "ctr_opportunities": [
+    {
+      "keyword": "certificeringsbeheer transport logistiek",
+      "position": "#3",
+      "position_int": 3,
+      "impressions": 3200,
+      "target_url": "frissestart.nlhttps://frissestart.nl/opleidingen/certificeringsbeheer",
+      "found_url": "https://frissestart.nl/blog/certificeringsbeheer-voor-transport-en-logistiek-houd-je-eenvoudig-overzicht-over-al-je-certificaten"
+    },
+    {
+      "keyword": "code 95 hercertificering 1 uur",
+      "position": "#1",
+      "position_int": 1,
+      "impressions": 2900,
+      "target_url": "frissestart.nlhttps://frissestart.nl/opleidingen/1-uurs-hercertificering",
+      "found_url": "https://frissestart.nl/opleidingen"
+    },
+    {
+      "keyword": "code 95 certificering 3 dagen",
+      "position": "#7",
+      "position_int": 7,
+      "impressions": 4100,
+      "target_url": "frissestart.nlhttps://frissestart.nl/3-daagse-code-95-korting",
+      "found_url": "https://frissestart.nl/3-daagse-code-95-korting"
+    },
+    {
+      "keyword": "code 95 in 3.5 dag behalen",
+      "position": "#10",
+      "position_int": 10,
+      "impressions": 2500,
+      "target_url": "frissestart.nlhttps://frissestart.nl/3-daagse-code-95-opleiding-korting",
+      "found_url": "https://frissestart.nl/3-daagse-code-95-korting"
+    },
+    {
+      "keyword": "code 95 nascholing nuenen",
+      "position": "#1",
+      "position_int": 1,
+      "impressions": 3800,
+      "target_url": "frissestart.nlhttps://frissestart.nl/code-95-eindhoven",
+      "found_url": "https://frissestart.nl/code-95-eindhoven"
+    },
+    {
+      "keyword": "code 95 eindhoven",
+      "position": "#3",
+      "position_int": 3,
+      "impressions": 4100,
+      "target_url": "frissestart.nlhttps://frissestart.nl/code-95-eindhoven",
+      "found_url": "https://frissestart.nl/code-95-eindhoven"
+    }
+  ],
+  "striking_distance": [],
+  "unranked": [
+    {
+      "keyword": "certificeringsbeheer",
+      "position": "Niet in Top 50 (>50)",
+      "position_int": 0,
+      "impressions": 4800,
+      "target_url": "frissestart.nlhttps://frissestart.nl/opleidingen/certificeringsbeheer",
+      "found_url": ""
+    },
+    {
+      "keyword": "e-learning code 95 combineren",
+      "position": "Niet in Top 50 (>50)",
+      "position_int": 0,
+      "impressions": 3600,
+      "target_url": "frissestart.nlhttps://frissestart.nl/code95-planner",
+      "found_url": ""
+    },
+    {
+      "keyword": "heftruckcertificaat halen eindhoven",
+      "position": "Niet in Top 50 (>50)",
+      "position_int": 0,
+      "impressions": 2950,
+      "target_url": "frissestart.nlhttps://frissestart.nl/heftruck-cursus",
+      "found_url": ""
+    },
+    {
+      "keyword": "vca behalen regio geldrop",
+      "position": "Niet in Top 50 (>50)",
+      "position_int": 0,
+      "impressions": 1800,
+      "target_url": "frissestart.nlhttps://frissestart.nl/vca-eindhoven",
+      "found_url": ""
+    }
+  ],
+  "summary": {
+    "ctr_kansen": 6,
+    "striking_distance": 0,
+    "niet_geindexeerd": 4
+  }
+}

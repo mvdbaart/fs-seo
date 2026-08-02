@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "gsc": {
+      "source": "jdrhyne/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsc/SKILL.md",
+      "computedHash": "976d6e882148f92840623da39791516669bc06f86fb42c8faf61d80d4a64f094"
+    }
+  }
+}
