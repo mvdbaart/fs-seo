@@ -144,7 +144,57 @@ function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS google_ads_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER,
+      name TEXT NOT NULL,
+      budget_daily_eur REAL DEFAULT 15.0,
+      target_locations TEXT DEFAULT 'Eindhoven, Geldrop, Helmond, Veldhoven, Nuenen',
+      status TEXT DEFAULT 'PAUSED',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS google_ads_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      landing_page_url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (campaign_id) REFERENCES google_ads_campaigns(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS google_ads_keywords (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      match_type TEXT DEFAULT 'EXACT',
+      cpc_bid_eur REAL DEFAULT 2.50,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (group_id) REFERENCES google_ads_groups(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS google_ads_copies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      headlines_json TEXT NOT NULL,
+      descriptions_json TEXT NOT NULL,
+      final_url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (group_id) REFERENCES google_ads_groups(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS google_ads_negatives (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      match_type TEXT DEFAULT 'PHRASE',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (campaign_id) REFERENCES google_ads_campaigns(id) ON DELETE CASCADE
+    );
   `);
+  
 
   // Ensure column keywords exists in crawled_pages if table was created previously
   try {

@@ -19,7 +19,8 @@ import {
   Wrench,
   TrendingUp,
   Activity,
-  Layers
+  Layers,
+  Megaphone
 } from 'lucide-react';
 
 import DashboardView from './components/DashboardView';
@@ -38,6 +39,7 @@ import CompetitorGapView from './components/CompetitorGapView';
 import ContentOptimizerView from './components/ContentOptimizerView';
 import Ga4ClarityView from './components/Ga4ClarityView';
 import PillarClusterView from './components/PillarClusterView';
+import GoogleAdsStudio from './components/GoogleAdsStudio';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -179,6 +181,9 @@ export default function App() {
           </li>
           {openGroups.tools && (
             <div className="nav-sub-list">
+              <li className={`nav-item ${activeTab === 'googleads' ? 'active' : ''}`} onClick={() => setActiveTab('googleads')}>
+                <Megaphone className="nav-item-icon" /> Google Ads Studio
+              </li>
               <li className={`nav-item ${activeTab === 'contentoptimizer' ? 'active' : ''}`} onClick={() => setActiveTab('contentoptimizer')}>
                 <Sparkles className="nav-item-icon" /> Content Optimizer
               </li>
@@ -219,6 +224,7 @@ export default function App() {
           <div>
             <h1 className="page-title">
               {activeTab === 'dashboard' && 'Dashboard Overzicht'}
+              {activeTab === 'googleads' && 'Google Ads Campaign Studio & Directe Export'}
               {activeTab === 'contentoptimizer' && 'AI Content Generator & Title Tag Optimizer'}
               {activeTab === 'localpack' && 'Google Maps & Local Pack Audit (Google Top 3 D-pack)'}
               {activeTab === 'gsc' && 'Google Search Console Audit & Plan van Aanpak'}
@@ -343,6 +349,10 @@ export default function App() {
 
         {activeTab === 'reports' && (
           <ReportsView dashboardData={dashboardData} />
+        )}
+
+        {activeTab === 'googleads' && (
+          <GoogleAdsStudio projectId={activeProject?.id} />
         )}
 
         {activeTab === 'settings' && (

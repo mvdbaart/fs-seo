@@ -27,6 +27,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "google-ads-api": "^24.1.0",
     "jspdf": "^3.0.1",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",

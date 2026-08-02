@@ -1084,6 +1084,87 @@ async function runScheduledRankChecks() {
 setInterval(runScheduledRankChecks, AUTO_CHECK_INTERVAL_MS);
 setTimeout(runScheduledRankChecks, 60 * 1000); // eerste controle 1 minuut na opstarten
 
+const googleAdsService = require('./services/googleAdsService');
+const googleAdsLiveService = require('./services/googleAdsLiveService');
+
+// ----------------------------------------------------
+// Google Ads Campaign Studio Endpoints
+// ----------------------------------------------------
+app.get('/api/google-ads/live-stats', async (req, res) => {
+  try {
+    const stats = await googleAdsLiveService.fetchLiveAccountStats('1868790470');
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/google-ads/blueprints', (req, res) => {
+  res.json({ blueprints: Object.keys(googleAdsService.CAMPAIGN_BLUEPRINTS) });
+});
+
+app.get('/api/google-ads/campaigns', (req, res) => {
+  try {
+    const campaigns = googleAdsService.getAllCampaigns(req.query.projectId);
+    res.json({ success: true, campaigns });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/google-ads/campaigns/:id', (req, res) => {
+  try {
+    const campaign = googleAdsService.getCampaignById(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campagne niet gevonden' });
+    res.json({ success: true, campaign });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/google-ads/campaigns', (req, res) => {
+  try {
+    const { projectId, ...campaignData } = req.body;
+    const saved = googleAdsService.saveCampaign(campaignData, projectId);
+    res.json({ success: true, campaign: saved });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/google-ads/campaigns/:id', (req, res) => {
+  try {
+    googleAdsService.deleteCampaign(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/google-ads/generate-blueprint', (req, res) => {
+  try {
+    const { blueprintKey, customSettings, projectId } = req.body;
+    const campaign = googleAdsService.createFromBlueprint(blueprintKey, customSettings, projectId);
+    res.json({ success: true, campaign });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/google-ads/export-csv/:id', (req, res) => {
+  try {
+    const csvContent = googleAdsService.exportCampaignCSV(req.params.id);
+    const campaign = googleAdsService.getCampaignById(req.params.id);
+    const filename = `GoogleAds_${(campaign ? campaign.name : 'Campaign').replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csvContent);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`SEO Tool Backend Server active on http://localhost:${PORT}`);
 });
