@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Zap, Smartphone, Monitor, AlertCircle, CheckCircle2, Clock, Cpu } from 'lucide-react';
+import AiPromptCanvas from './AiPromptCanvas';
 
 export default function PageSpeedView({ projectId, projectDomain }) {
   const [url, setUrl] = useState(projectDomain || 'https://voorbeeld.nl');
@@ -202,6 +203,11 @@ export default function PageSpeedView({ projectId, projectDomain }) {
               )}
             </div>
           </div>
+
+          <AiPromptCanvas
+            title="AI Prompt: PageSpeed & Core Web Vitals Optimalisatie"
+            promptText={`Je bent een Senior Frontend & Web Performance Engineer. Hier zijn de live Google PageSpeed Insights resultaten voor ${url} (${strategy}):\n\n- Performance Score: ${auditData.performance_score}/100\n- LCP (Largest Contentful Paint): ${auditData.lcp}\n- CLS (Cumulative Layout Shift): ${auditData.cls}\n- INP / FID: ${auditData.inp}\n- FCP: ${auditData.fcp}\n\nBelangrijkste vertragingsdiagnoses:\n${(auditData.diagnostics || []).map(d => `- ${d.title}: ${d.description}`).join('\n')}\n\nOpdracht:\n1. Geef concrete codevoorbeelden (CSS/HTML/JS) om de LCP en CLS scores op deze pagina direct te verbeteren.\n2. Geef aan welke afbeeldingen of scripts uitgesteld (deferred/async) moeten worden.\n3. Schrijf een stappenplan voor caching en resource inladen.`}
+          />
         </>
       ) : (
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>

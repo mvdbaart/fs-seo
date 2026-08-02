@@ -14,6 +14,7 @@ import {
   Activity,
   UserCheck
 } from 'lucide-react';
+import AiPromptCanvas from './AiPromptCanvas';
 
 export default function Ga4ClarityView({ projectId, activeProject }) {
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -199,6 +200,11 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
           ))}
         </div>
       </div>
+
+      <AiPromptCanvas
+        title="AI Prompt: UX Frustraties & Conversie Dips Oplossen"
+        promptText={`Je bent een Senior CRO (Conversion Rate Optimization) & UX/UI Specialist. Hier zijn de live GA4 en Microsoft Clarity geanalyseerde data voor ons project ${activeProject?.name || ''}:\n\n- Totaal Rage Clicks (Clarity Frustratie): ${totals.totalRageClicks || 0}\n- Totaal Dead Clicks (Onklikbare elementen): ${totals.totalDeadClicks || 0}\n- SEO Conversieratio: ${totals.overallConversionRate || '0%'}\n\nOverzicht per landingspagina:\n${landingPageInsights.map(p => `- ${p.title} (${p.url}): ${p.visits} bezoeken, ${p.bounceRate} bounce, ${p.rageClicks} rage clicks, ${p.deadClicks} dead clicks, ${p.conversionRate} conversie`).join('\n')}\n\nGedetecteerde UX Knopen:\n${uxIssues.map(i => `- ${i.title}: ${i.description}`).join('\n')}\n\nOpdracht:\n1. Schrijf voor elke pagina met rage clicks/dead clicks een gedetailleerd UX-ontwerpadvies (knoppen, formulieren, lay-out).\n2. Schrijf 3 concrete A/B test hypotheses om het conversiepercentage van de laagst scorende landingspagina's te verdubbelen.`}
+      />
     </div>
   );
 }

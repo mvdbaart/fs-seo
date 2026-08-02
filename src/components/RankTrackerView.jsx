@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   History
 } from 'lucide-react';
+import AiPromptCanvas from './AiPromptCanvas';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 export default function RankTrackerView({ projectId, activeProject }) {
@@ -496,34 +497,12 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           </div>
         </div>
 
-        {/* Right Column: Custom AI Prompt Proposal */}
-        <div className="card" style={{ border: '1px solid var(--primary-border)', background: 'var(--primary-light)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
-                <Sparkles size={18} /> Kant-en-klare AI Prompt voor Real Ranking Stijging
-              </h3>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Kopieer naar ChatGPT/Claude om landingspagina's te bouwen voor niet-geindexeerde zoekwoorden.
-              </p>
-            </div>
-
-            <button className="btn btn-primary" onClick={handleCopyPrompt}>
-              {copied ? (
-                <>
-                  <Check size={14} /> Gekopieerd!
-                </>
-              ) : (
-                <>
-                  <Copy size={14} /> Kopieer Prompt
-                </>
-              )}
-            </button>
-          </div>
-
-          <div style={{ background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', whiteSpace: 'pre-wrap', lineHeight: 1.5, color: 'var(--text-main)', maxHeight: '280px', overflowY: 'auto' }}>
-            {rankAiPromptProposal}
-          </div>
+        {/* Right Column: Custom AI Prompt Canvas */}
+        <div style={{ marginTop: '-24px' }}>
+          <AiPromptCanvas
+            title="Kant-en-klare AI Prompt: Posities Veroveren"
+            promptText={rankAiPromptProposal}
+          />
         </div>
       </div>
     </div>
