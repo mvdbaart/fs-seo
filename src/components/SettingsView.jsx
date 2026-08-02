@@ -401,6 +401,38 @@ export default function SettingsView({ activeProject, onProjectChange }) {
                 </span>
               </div>
             )}
+
+            {/* Handleiding voor de gebruiker */}
+            <details style={{ marginTop: '14px', background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px 16px', fontSize: '0.85rem' }}>
+              <summary style={{ fontWeight: 700, cursor: 'pointer', color: 'var(--primary)' }}>
+                📖 Hoe kom je aan deze GitHub & Vercel gegevens? (Klik voor stappenplan)
+              </summary>
+              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                <div>
+                  <strong style={{ color: 'var(--text-main)' }}>1. GitHub Personal Access Token (PAT):</strong>
+                  <ol style={{ paddingLeft: '20px', marginTop: '4px' }}>
+                    <li>Ga in GitHub naar <strong>Settings ➔ Developer settings ➔ Personal access tokens ➔ Tokens (classic)</strong>.</li>
+                    <li>Klik op <strong>Generate new token (classic)</strong>.</li>
+                    <li>Vink minstens <code>repo</code> (Full control of private repositories) aan.</li>
+                    <li>Kopieer de token (begint met <code>ghp_</code> of <code>github_pat_</code>) en plak hem in het veld hierboven.</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <strong style={{ color: 'var(--text-main)' }}>2. GitHub Repository (Owner/Repo):</strong>
+                  <p style={{ marginTop: '2px' }}>
+                    De naam van je GitHub-repository inclusief je organisatie/gebruikersnaam. Bijvoorbeeld: <code>FrisseStart/fs-next</code> of <code>jouwnaam/fs-next</code>.
+                  </p>
+                </div>
+
+                <div>
+                  <strong style={{ color: 'var(--text-main)' }}>3. Remote Vercel URL:</strong>
+                  <p style={{ marginTop: '2px' }}>
+                    Ga naar je <strong>Vercel Dashboard ➔ Project Settings ➔ Domains</strong>. Kopieer de live URL (bijv. <code>https://frissestart.nl</code> of <code>https://fs-next-xxx.vercel.app</code>).
+                  </p>
+                </div>
+              </div>
+            </details>
           </div>
 
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 12px' }}>Bedrijfsgegevens (NAP) voor Local SEO</h3>
