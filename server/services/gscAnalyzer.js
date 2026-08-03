@@ -37,9 +37,7 @@ function getCrawlHealth(projectId) {
     errors: pages.filter(p => p.status_code >= 400).length,
     crawledAt: lastSession.created_at
   };
-}
-
-function buildActionPlan(ctrOpportunities, strikingDistance, unranked) {
+}function buildActionPlan(ctrOpportunities, strikingDistance, unranked) {
   const plan = [];
 
   if (ctrOpportunities.length > 0) {
@@ -56,10 +54,10 @@ function buildActionPlan(ctrOpportunities, strikingDistance, unranked) {
   if (strikingDistance.length > 0) {
     const voorbeelden = strikingDistance.slice(0, 3).map(o => `"${o.keyword}"`).join(', ');
     plan.push({
-      phase: 'Fase 2: Striking distance zoekwoorden naar Pagina 1',
+      phase: 'Fase 2: Hub & Spoke Uitbreiding voor Pagina 2 zoekwoorden',
       priority: 'Hoog',
-      title: 'Content verdiepen en interne links toevoegen',
-      description: `Zoekwoorden op positie 11-20 zoals ${voorbeelden} kunnen met extra verdiepende content (300+ woorden), FAQ-secties en gerichte interne links doorstijgen naar pagina 1.`,
+      title: 'Spoke artikelen verdiepen & linken naar centrale Pillar Hub',
+      description: `Zoekwoorden op positie 11-20 zoals ${voorbeelden} kun je naar pagina 1 tillen via de Hub & Spoke architectuur van fs-next. Bouw of verdiep specifieke Spoke pagina's (/kennisbank/[hub]/[spoke]) en plaats verplichte interne tekstlinks naar de overkoepelende Pillar pagina (/kennisbank/[hub]).`,
       timeframe: 'Week 2-3'
     });
   }
@@ -67,10 +65,10 @@ function buildActionPlan(ctrOpportunities, strikingDistance, unranked) {
   if (unranked.length > 0) {
     const voorbeelden = unranked.slice(0, 3).map(o => `"${o.keyword}"`).join(', ');
     plan.push({
-      phase: 'Fase 3: Nieuwe landingspagina\'s voor onvindbare zoekwoorden',
+      phase: 'Fase 3: Nieuwe Hub & Spoke clusters bouwen',
       priority: 'Kritiek',
-      title: 'Landingspagina\'s bouwen',
-      description: `Voor ${voorbeelden} is momenteel geen positie gevonden. Maak specifieke landingspagina's met lokale zoekwoorden en schema markup om deze termen te veroveren.`,
+      title: 'Nieuwe Pillar & Spoke structuur inzetten',
+      description: `Voor ${voorbeelden} is momenteel geen positie gevonden. Maak per hoofdthema een centrale Hub / Pillar pagina (/kennisbank/[hub]) met 3 tot 5 ondersteunende Spoke artikelen (/kennisbank/[hub]/[spoke]) die met zoekwoordrijke ankerteksten direct teruglinken naar de Pillar.`,
       timeframe: 'Direct'
     });
   }
@@ -105,16 +103,54 @@ Opdracht:
 
     page2JumpPrompt: `Je bent een SEO Content Strategist voor ${projectName} (${domain}).
 
+Onze website maakt gebruik van de **Hub & Spoke architectuur van fs-next** (/kennisbank/[hub]/[spoke]).
+Centrale Pillar / Hub pagina's overkoepelen hoofdthema's, en ondersteunende Spoke artikelen versterken de Hub via gerichte interne links.
+
 Deze zoekwoorden staan op pagina 2 van Google.nl (positie 11-20):
 ${sdList}
 
-Schrijf per zoekwoord een content-uitbreidingsplan:
-1. 1x verbeterde H1 koptekst.
-2. 4x H2 subkoppen die zoekintentie-vragen beantwoorden.
-3. 300 woorden verdiepende content.
-4. 3 interne link-suggesties met ankertekst.
-5. Passende JSON-LD schema markup.`
+Schrijf per zoekwoord een Hub & Spoke uitbreidingsplan:
+1. **Thema & Structuur**: Bepaal onder welke overkoepelende Pillar / Hub pagina (/kennisbank/[hub]) dit zoekwoord valt.
+2. **Spoke Artikel Specs** (/kennisbank/[hub]/[spoke-slug]):
+   - 1x geoptimaliseerde H1 koptekst.
+   - 4x H2 subkoppen die de zoekintentie beantwoorden.
+   - 350+ woorden verdiepende content.
+3. **Interne Link Instructies (CRUCIAAL voor fs-next Hub & Spoke)**:
+   - Neem in de eerste alinea van het Spoke artikel 1 verplichte interne tekstlink op naar de centrale Hub / Pillar pagina (/kennisbank/[hub]) met zoekwoordrijke ankertekst.
+   - Link onderaan naar verwante Spoke artikelen (sibling spokes) en naar de relevante commerciële cursus/dienst pagina van FrisseStart.
+4. **JSON-LD Schema**: Genereer passende FAQPage & Article schema markup.`
   };
+}
+
+function isBrandKeyword(keyword, domain = '', businessName = '') {
+  if (!keyword || typeof keyword !== 'string') return false;
+  const kw = keyword.toLowerCase().trim();
+  const kwNoSpace = kw.replace(/[^a-z0-9]/g, '');
+  if (!kwNoSpace) return false;
+
+  const cleanDomain = (domain || '')
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .split('.')[0]
+    .toLowerCase();
+  const domainStem = cleanDomain.replace(/[^a-z0-9]/g, '');
+
+  if (domainStem && domainStem.length >= 3 && kwNoSpace.includes(domainStem)) {
+    return true;
+  }
+
+  if (businessName && typeof businessName === 'string') {
+    const cleanBiz = businessName
+      .toLowerCase()
+      .replace(/\b(bv|vof|n\.v\.|inc|llc|flex|&|opleiden)\b/gi, '')
+      .trim();
+    const bizStem = cleanBiz.replace(/[^a-z0-9]/g, '');
+    if (bizStem && bizStem.length >= 3 && kwNoSpace.includes(bizStem)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function analyzeGscDataLive(project, domain) {
@@ -149,6 +185,12 @@ async function analyzeGscDataLive(project, domain) {
 
   for (const row of queryRows) {
     const [query, page] = row.keys;
+    
+    // Merknaam zoekwoorden uitsluiten van SEO kansen & actieplan
+    if (isBrandKeyword(query, domain, project.name)) {
+      continue;
+    }
+
     const position = row.position;
     const entryBase = {
       keyword: query,
@@ -205,6 +247,10 @@ function analyzeGscDataFallback(project, domain, gscError) {
   const unranked = [];
 
   for (const row of rankings) {
+    if (isBrandKeyword(row.keyword, domain, project.name)) {
+      continue;
+    }
+
     const entry = {
       keyword: row.keyword,
       position: row.position > 0 ? `#${row.position}` : 'Niet gevonden (>50)',
@@ -272,4 +318,96 @@ async function analyzeGscData(projectId) {
   return analyzeGscDataFallback(project, domain, null);
 }
 
-module.exports = { analyzeGscData };
+let gscKeywordMetricsCache = {
+  data: {},
+  timestamp: 0
+};
+
+/**
+ * Fetch keyword metrics (impressions, clicks, ctr, trend) from Google Search Console
+ * for all keywords associated with a project. Caches results for 5 minutes.
+ */
+async function getGscKeywordMetrics(projectId) {
+  const cacheKey = `proj_${projectId}`;
+  const now = Date.now();
+  if (gscKeywordMetricsCache.data[cacheKey] && (now - gscKeywordMetricsCache.timestamp < 5 * 60 * 1000)) {
+    return gscKeywordMetricsCache.data[cacheKey];
+  }
+
+  const defaultResult = { gscConnected: false, map: {} };
+
+  if (!gscClient.isConfigured()) {
+    return defaultResult;
+  }
+
+  try {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    if (!project) return defaultResult;
+
+    const siteUrl = await gscClient.resolveSiteUrl(project.domain);
+    if (!siteUrl) return defaultResult;
+
+    const end = new Date();
+    end.setDate(end.getDate() - 2); // GSC data runs ~2 days behind
+    const start = new Date(end);
+    start.setDate(start.getDate() - 27); // Last 28 days
+
+    const prevEnd = new Date(start);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - 27); // Previous 28 days
+
+    const [currentRows, prevRows] = await Promise.all([
+      gscClient.querySearchAnalytics(siteUrl, {
+        startDate: formatDate(start),
+        endDate: formatDate(end),
+        dimensions: ['query'],
+        rowLimit: 1000
+      }).catch(() => []),
+      gscClient.querySearchAnalytics(siteUrl, {
+        startDate: formatDate(prevStart),
+        endDate: formatDate(prevEnd),
+        dimensions: ['query'],
+        rowLimit: 1000
+      }).catch(() => [])
+    ]);
+
+    const prevMap = {};
+    for (const row of prevRows) {
+      if (row.keys && row.keys[0]) {
+        prevMap[row.keys[0].toLowerCase().trim()] = Math.round(row.impressions);
+      }
+    }
+
+    const map = {};
+    for (const row of currentRows) {
+      if (row.keys && row.keys[0]) {
+        const kw = row.keys[0].toLowerCase().trim();
+        const impressions = Math.round(row.impressions);
+        const clicks = Math.round(row.clicks);
+        const ctr = (row.ctr * 100).toFixed(1) + '%';
+        const prevImpressions = prevMap[kw] || 0;
+
+        let trend = 0;
+        if (prevImpressions > 0) {
+          trend = Math.round(((impressions - prevImpressions) / prevImpressions) * 100);
+        } else if (impressions > 0) {
+          trend = 100; // New query appearing in search console
+        }
+
+        map[kw] = { impressions, clicks, ctr, prevImpressions, trend };
+      }
+    }
+
+    const result = { gscConnected: true, map };
+    gscKeywordMetricsCache.data[cacheKey] = result;
+    gscKeywordMetricsCache.timestamp = now;
+    return result;
+  } catch (err) {
+    console.error('Fout bij ophalen GSC zoekwoord-statistieken:', err.message);
+    return defaultResult;
+  }
+}
+
+module.exports = { analyzeGscData, getGscKeywordMetrics };
+

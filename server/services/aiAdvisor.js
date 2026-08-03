@@ -99,8 +99,8 @@ function generateSeoRecommendations(projectId) {
     recommendations.push({
       type: 'opportunity',
       title: `${strikingDistance.length} zoekwoord(en) binnen striking distance (positie 4-20)`,
-      description: `${strikingDistance.slice(0, 3).map(r => `"${r.keyword}" (#${r.position})`).join(', ')}. Deze kunnen met gerichte optimalisatie naar de top 3.`,
-      action: 'Verdiep de content en bouw interne links naar deze pagina\'s'
+      description: `${strikingDistance.slice(0, 3).map(r => `"${r.keyword}" (#${r.position})`).join(', ')}. Tillen naar top 3 via de Hub & Spoke architectuur van fs-next.`,
+      action: 'Verdiep de Spoke artikelen (/kennisbank/[hub]/[spoke]) en plaats interne tekstlinks naar de overkoepelende Pillar pagina (/kennisbank/[hub])'
     });
   }
 
@@ -108,8 +108,8 @@ function generateSeoRecommendations(projectId) {
     recommendations.push({
       type: 'critical',
       title: `${unranked.length} zoekwoord(en) niet gevonden in de top 100`,
-      description: `${unranked.slice(0, 3).map(r => `"${r.keyword}"`).join(', ')}. Er is waarschijnlijk geen specifieke landingspagina voor deze termen.`,
-      action: 'Maak specifieke landingspagina\'s voor deze zoekwoorden'
+      description: `${unranked.slice(0, 3).map(r => `"${r.keyword}"`).join(', ')}. Geen specifieke Hub / Spoke landingsstructuur gevonden voor deze termen.`,
+      action: 'Bouw nieuwe Hub / Spoke clusters in fs-next: maak per thema een centrale Pillar (/kennisbank/[hub]) met ondersteunende Spokes'
     });
   }
 

@@ -19,7 +19,9 @@ import {
   ShieldOff,
   AlertTriangle,
   History,
-  Tag
+  Tag,
+  Eye,
+  Minus
 } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
@@ -63,7 +65,7 @@ export default function RankTrackerView({ projectId, activeProject }) {
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [sortField, setSortField] = useState('position');
   const [sortOrder, setSortOrder] = useState('asc');
-  const [hideBrandKeywords, setHideBrandKeywords] = useState(false);
+  const [hideBrandKeywords, setHideBrandKeywords] = useState(true);
   const [deletingBrand, setDeletingBrand] = useState(false);
 
   const domain = activeProject?.domain || '';
@@ -208,8 +210,16 @@ export default function RankTrackerView({ projectId, activeProject }) {
     let valA = a[sortField];
     let valB = b[sortField];
 
-    if (valA === 0 || valA === null || valA === undefined) valA = 999;
-    if (valB === 0 || valB === null || valB === undefined) valB = 999;
+    if (sortField === 'position' || sortField === 'previous_position') {
+      if (valA === 0 || valA === null || valA === undefined) valA = 999;
+      if (valB === 0 || valB === null || valB === undefined) valB = 999;
+    } else if (sortField === 'search_volume' || sortField === 'impressions' || sortField === 'trend') {
+      if (valA === null || valA === undefined) valA = -999;
+      if (valB === null || valB === undefined) valB = -999;
+    } else {
+      if (valA === 0 || valA === null || valA === undefined) valA = 999;
+      if (valB === 0 || valB === null || valB === undefined) valB = 999;
+    }
 
     if (typeof valA === 'string') {
       return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
@@ -250,10 +260,10 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
   return (
     <div>
       {/* Header & Add Keyword Form */}
-      <div className="card">
-        <div className="card-title" style={{ justifyContent: 'space-between' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Search size={20} color="var(--primary)" /> Live Dutch Keyword Rank Tracker (Google.nl vanaf Geldrop / Nuenen)
+      <div className="card" style={{ padding: '14px 18px', marginBottom: '14px' }}>
+        <div className="card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+            <Search size={18} color="var(--primary)" /> Live Dutch Keyword Rank Tracker (Google.nl vanaf Geldrop / Nuenen)
           </span>
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -277,29 +287,30 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                   alert(`Fout bij importeren uit Supabase: ${e.message}`);
                 }
               }}
-              style={{ background: '#059669', color: '#ffffff', borderColor: '#059669' }}
+              style={{ background: '#059669', color: '#ffffff', borderColor: '#059669', padding: '5px 10px', fontSize: '0.8rem' }}
             >
-              <RefreshCw size={16} /> Sync Cursussen uit Supabase
+              <RefreshCw size={14} /> Sync Cursussen uit Supabase
             </button>
 
-            <button className="btn btn-primary" onClick={handleCheckRankings} disabled={checking}>
+            <button className="btn btn-primary" onClick={handleCheckRankings} disabled={checking} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
               {checking ? (
                 <>
-                  <RefreshCw size={16} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Controleren op Google.nl...
+                  <RefreshCw size={14} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Controleren op Google.nl...
                 </>
               ) : (
                 <>
-                  <RefreshCw size={16} /> Check Live Rankings Nu
+                  <RefreshCw size={14} /> Check Live Rankings Nu
                 </>
               )}
             </button>
           </div>
         </div>
 
-        <form onSubmit={handleAddKeyword} className="input-group" style={{ marginBottom: 0 }}>
+        <form onSubmit={handleAddKeyword} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 0 }}>
           <input 
             type="text"
             className="input-field"
+            style={{ flex: '1 1 200px', minWidth: '150px' }}
             placeholder="Nieuw zoekwoord (bijv. 'heftruckcertificaat halen eindhoven')"
             value={newKeyword}
             onChange={(e) => setNewKeyword(e.target.value)}
@@ -308,13 +319,14 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           <input 
             type="text"
             className="input-field"
+            style={{ flex: '1 1 150px', minWidth: '120px' }}
             placeholder="Doel URL (optioneel)"
             value={targetUrl}
             onChange={(e) => setTargetUrl(e.target.value)}
           />
           <select 
             className="input-field" 
-            style={{ maxWidth: '160px' }}
+            style={{ width: '120px', flexShrink: 0 }}
             value={region}
             onChange={(e) => setRegion(e.target.value)}
           >
@@ -324,19 +336,19 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
             <option value="Helmond">Helmond</option>
             <option value="Nederland">Heel Nederland</option>
           </select>
-          <button type="submit" className="btn btn-secondary">
-            <Plus size={16} /> Zoekwoord Toevoegen
+          <button type="submit" className="btn btn-secondary" style={{ flexShrink: 0, padding: '6px 12px' }}>
+            <Plus size={15} /> Zoekwoord Toevoegen
           </button>
         </form>
       </div>
 
       {/* KPI Cards */}
-      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-header">Totaal Gemonitord</div>
           <div className="stat-value">
             {keywords.length}
-            {hideBrandKeywords && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px' }}>({keywords.length - brandKeywordsCount} ex. merk)</span>}
+            {hideBrandKeywords && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '4px' }}>({keywords.length - brandKeywordsCount} ex. merk)</span>}
           </div>
         </div>
         <div className="stat-card">
@@ -360,31 +372,31 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
       </div>
 
       {/* Filter Tabs & Brand Controls & Search Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-        <div className="filter-tabs" style={{ marginBottom: 0 }}>
-          <button className={`tab-btn ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div className="filter-tabs" style={{ marginBottom: 0, gap: '4px' }}>
+          <button className={`tab-btn ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
             Alle ({keywords.filter(k => !hideBrandKeywords || !isBrand(k.keyword)).length})
           </button>
-          <button className={`tab-btn ${activeFilter === 'top3' ? 'active' : ''}`} onClick={() => setActiveFilter('top3')}>
+          <button className={`tab-btn ${activeFilter === 'top3' ? 'active' : ''}`} onClick={() => setActiveFilter('top3')} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
             Top 3 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 3).length})
           </button>
-          <button className={`tab-btn ${activeFilter === 'top10' ? 'active' : ''}`} onClick={() => setActiveFilter('top10')}>
+          <button className={`tab-btn ${activeFilter === 'top10' ? 'active' : ''}`} onClick={() => setActiveFilter('top10')} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
             Top 10 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 10).length})
           </button>
-          <button className={`tab-btn ${activeFilter === 'unranked' ? 'active' : ''}`} onClick={() => setActiveFilter('unranked')}>
+          <button className={`tab-btn ${activeFilter === 'unranked' ? 'active' : ''}`} onClick={() => setActiveFilter('unranked')} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
             Niet in Top 100 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position === 0).length})
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Brand Filter Toggle Button */}
           <button 
             className={`btn ${hideBrandKeywords ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ padding: '5px 10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
             onClick={() => setHideBrandKeywords(!hideBrandKeywords)}
             title={hideBrandKeywords ? "Toon alle zoekwoorden inclusief merknamen" : "Verberg merknaam zoekwoorden uit de lijst"}
           >
-            {hideBrandKeywords ? <ShieldOff size={15} /> : <Tag size={15} />}
+            {hideBrandKeywords ? <ShieldOff size={14} /> : <Tag size={14} />}
             {hideBrandKeywords ? 'Merknamen Verborgen' : 'Verberg Merknamen'}
           </button>
 
@@ -392,12 +404,12 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           {brandKeywordsCount > 0 && (
             <button 
               className="btn btn-danger"
-              style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ padding: '5px 10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
               onClick={handleDeleteBrandKeywords}
               disabled={deletingBrand}
               title="Verwijder alle merknaam zoekwoorden definitief uit de database"
             >
-              <Trash2 size={15} />
+              <Trash2 size={14} />
               {deletingBrand ? 'Opschonen...' : `Schoon Merknamen Op (${brandKeywordsCount})`}
             </button>
           )}
@@ -405,7 +417,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           {uniqueRegions.length > 0 && (
             <select 
               className="input-field" 
-              style={{ width: '140px', padding: '6px 10px', fontSize: '0.85rem' }}
+              style={{ width: '120px', padding: '5px 8px', fontSize: '0.8rem' }}
               value={selectedRegion}
               onChange={(e) => setSelectedRegion(e.target.value)}
             >
@@ -416,12 +428,12 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
             </select>
           )}
 
-          <div style={{ position: 'relative', width: '200px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <div style={{ position: 'relative', width: '170px' }}>
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input 
               type="text"
               className="input-field"
-              style={{ paddingLeft: '36px' }}
+              style={{ paddingLeft: '30px', padding: '5px 10px 5px 30px', fontSize: '0.8rem' }}
               placeholder="Zoek zoekwoord..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -431,7 +443,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
       </div>
 
       {/* Sortable Keywords Table */}
-      <div className="table-container" style={{ marginBottom: '32px' }}>
+      <div className="table-container" style={{ marginBottom: '20px' }}>
         <table className="custom-table">
           <thead>
             <tr>
@@ -440,6 +452,12 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
               </th>
               <th onClick={() => handleSort('region')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Regio {renderSortIcon('region')}</div>
+              </th>
+              <th onClick={() => handleSort('impressions')} style={{ cursor: 'pointer' }} title="Vertoningen in Google Search Console over de afgelopen 28 dagen">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Zoekvolume (GSC) {renderSortIcon('impressions')}</div>
+              </th>
+              <th onClick={() => handleSort('trend')} style={{ cursor: 'pointer' }} title="Procentuele stijging/daling in GSC-vertoningen t.o.v. de vorige 28 dagen">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Trend (28d) {renderSortIcon('trend')}</div>
               </th>
               <th onClick={() => handleSort('position')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Echte Positie (Google.nl) {renderSortIcon('position')}</div>
@@ -456,7 +474,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           <tbody>
             {sortedKeywords.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                   Geen zoekwoorden gevonden voor de huidige filter/zoekopdracht.
                 </td>
               </tr>
@@ -486,6 +504,41 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                       <span className="badge badge-info" style={{ gap: '4px' }}>
                         <MapPin size={10} /> {kw.region || 'Geldrop'}
                       </span>
+                    </td>
+                    <td>
+                      {kw.impressions > 0 ? (
+                        <span style={{ fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Eye size={13} color="var(--primary)" />
+                          {kw.impressions.toLocaleString('nl-NL')} <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>/mnd</span>
+                        </span>
+                      ) : kw.search_volume > 0 ? (
+                        <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                          {kw.search_volume.toLocaleString('nl-NL')} <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>/mnd</span>
+                        </span>
+                      ) : kw.gsc_connected ? (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>
+                          0 <span style={{ fontSize: '0.75rem' }}>/mnd</span>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {kw.trend > 0 ? (
+                        <span className="badge badge-success" style={{ gap: '3px', fontSize: '0.78rem' }}>
+                          <TrendingUp size={12} /> +{kw.trend}%
+                        </span>
+                      ) : kw.trend < 0 ? (
+                        <span className="badge badge-danger" style={{ gap: '3px', fontSize: '0.78rem' }}>
+                          <TrendingDown size={12} /> {kw.trend}%
+                        </span>
+                      ) : kw.gsc_connected ? (
+                        <span className="badge badge-info" style={{ gap: '3px', fontSize: '0.78rem', opacity: 0.7 }}>
+                          <Minus size={12} /> 0%
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>—</span>
+                      )}
                     </td>
                     <td>
                       {kw.position > 0 ? (
@@ -540,7 +593,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                   </tr>
                   {expandedId === kw.id && (
                     <tr>
-                      <td colSpan="6" style={{ background: 'var(--bg-main)', padding: '16px 24px' }}>
+                      <td colSpan="8" style={{ background: 'var(--bg-main)', padding: '16px 24px' }}>
                         {chartData.filter(d => d.position !== null).length < 2 ? (
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '12px' }}>
                             {history.length === 0

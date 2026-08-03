@@ -717,7 +717,7 @@ app.get('/api/crawl/sessions/:id', (req, res) => {
 // ----------------------------------------------------
 // Keyword Rank Tracker Endpoints
 // ----------------------------------------------------
-app.get('/api/keywords', (req, res) => {
+app.get('/api/keywords', async (req, res) => {
   try {
     const projectId = req.query.projectId || 1;
     const keywords = db.prepare(`
@@ -731,10 +731,42 @@ app.get('/api/keywords', (req, res) => {
       ORDER BY k.id DESC
     `).all(projectId);
 
-    const parsedKeywords = keywords.map(kw => ({
-      ...kw,
-      serp_features: kw.serp_features ? JSON.parse(kw.serp_features) : []
-    }));
+    const { getGscKeywordMetrics } = require('./services/gscAnalyzer');
+    const gscMetrics = await getGscKeywordMetrics(projectId);
+
+    const parsedKeywords = keywords.map(kw => {
+      const kwClean = kw.keyword ? kw.keyword.toLowerCase().trim() : '';
+      let gscData = gscMetrics.map[kwClean] || null;
+
+      // Fallback: match if all core words of keyword appear in a GSC query
+      if (!gscData && kwClean) {
+        const words = kwClean.split(/\s+/).filter(w => w.length > 2);
+        if (words.length > 0) {
+          for (const [query, data] of Object.entries(gscMetrics.map)) {
+            if (words.every(w => query.includes(w))) {
+              gscData = data;
+              break;
+            }
+          }
+        }
+      }
+
+      const impressions = gscData ? gscData.impressions : 0;
+      const clicks = gscData ? gscData.clicks : 0;
+      const ctr = gscData ? gscData.ctr : null;
+      const trend = gscData ? gscData.trend : 0;
+
+      return {
+        ...kw,
+        impressions,
+        clicks,
+        ctr,
+        trend,
+        gsc_connected: gscMetrics.gscConnected,
+        search_volume: kw.search_volume && kw.search_volume > 0 ? kw.search_volume : impressions,
+        serp_features: kw.serp_features ? JSON.parse(kw.serp_features) : []
+      };
+    });
 
     res.json(parsedKeywords);
   } catch (err) {

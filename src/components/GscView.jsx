@@ -27,7 +27,7 @@ export default function GscView({ projectId, activeProject }) {
   const [imported, setImported] = useState(false);
   const [copiedCtr, setCopiedCtr] = useState(false);
   const [copiedPage2, setCopiedPage2] = useState(false);
-  const [hideBrand, setHideBrand] = useState(false);
+  const [hideBrand, setHideBrand] = useState(true);
 
   useEffect(() => {
     fetchGscData();

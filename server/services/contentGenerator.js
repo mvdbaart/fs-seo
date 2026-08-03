@@ -96,6 +96,11 @@ async function generateContentBrief(targetUrl, keyword) {
 
   const suggestedStructure = {
     h1: `${capKw}: Altijd Up-to-Date Certificaten & Herhalende Opleidingen`,
+    hubSpokeRule: {
+      hubUrl: `/kennisbank/${cleanKw.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`,
+      spokeUrlPattern: `/kennisbank/[hub-slug]/${cleanKw.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`,
+      internalLinkInstruction: 'Neem in de 1e alinea 1 directe interne tekstlink op naar de centrale Hub / Pillar pagina met zoekwoordrijke ankertekst.'
+    },
     h2Sections: [
       {
         heading: `Hoe werkt ${cleanKw} voor jouw transport- en logistiekbedrijf?`,
@@ -131,9 +136,12 @@ async function generateContentBrief(targetUrl, keyword) {
     ]
   };
 
-  const aiCopyPrompt = `Je bent een vooraanstaande Nederlandse SEO Copywriter gespecialiseerd in Transport, Logistiek en Opleidingen.
+  const aiCopyPrompt = `Je bent een vooraanstaande Nederlandse SEO Copywriter gespecialiseerd in Transport, Logistiek en Opleidingen voor FrisseStart.nl.
 
-Ik wil de landingspagina voor het zoekwoord "${cleanKw}" (URL: ${targetUrl || 'https://frissestart.nl/opleidingen/certificeringsbeheer'}) optimaliseren.
+Onze website maakt gebruik van de **Hub & Spoke architectuur van fs-next** (/kennisbank/[hub]/[spoke]).
+Dit artikel dient als ondersteunend Spoke-artikel of Pillar-pagina binnen de kennisbank.
+
+Ik wil de pagina voor het zoekwoord "${cleanKw}" (URL: ${targetUrl || 'https://frissestart.nl/opleidingen/certificeringsbeheer'}) optimaliseren.
 
 Huidige status:
 - Huidige H1: ${fetchedPage.h1 || 'Nog niet aanwezig'}
@@ -142,10 +150,11 @@ Huidige status:
 Opdracht:
 Schrijf een verdiepende, conversiegerichte tekst met nadruk op periodieke hercertificering en herhalende inkomsten met de volgende structuur:
 1. H1: ${suggestedStructure.h1}
-2. Introduceer het belang van actuele certificeringen (Code 95, VCA, Heftruck) en de slimme oplossingen van FrisseStart.
-3. Werk onderstaande H2 koppen uit:
+2. **Hub & Spoke Interne Link (CRUCIAAL)**: Plaats in de eerste alinea 1 verplichte interne tekstlink naar de overkoepelende Pillar / Hub pagina (/kennisbank/[hub]) met een zoekwoordrijke ankertekst.
+3. Introduceer het belang van actuele certificeringen (Code 95, VCA, Heftruck) en de slimme oplossingen van FrisseStart.
+4. Werk onderstaande H2 koppen uit:
 ${suggestedStructure.h2Sections.map(s => `- H2: ${s.heading} (${s.contentFocus})`).join('\n')}
-4. Sluit af met een krachtige Call To Action om gratis advies of het certificeringsbeheer dashboard in te zetten.`;
+5. Sluit af met een krachtige Call To Action om gratis advies, een cursus in te plannen of het certificeringsbeheer dashboard in te zetten.`;
 
   return {
     url: targetUrl,
