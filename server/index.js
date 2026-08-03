@@ -549,7 +549,7 @@ app.delete('/api/competitors/:id', (req, res) => {
 });
 
 // Dashboard summary data
-app.get('/api/projects/:id/dashboard', (req, res) => {
+app.get('/api/projects/:id/dashboard', async (req, res) => {
   try {
     const projectId = req.params.id;
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
@@ -590,7 +590,7 @@ app.get('/api/projects/:id/dashboard', (req, res) => {
     };
 
     const lastAudit = db.prepare('SELECT * FROM pagespeed_audits WHERE project_id = ? ORDER BY created_at DESC LIMIT 1').get(projectId);
-    const geoData = getGeoAnalysis(projectId);
+    const geoData = await getGeoAnalysis(projectId);
     const recommendations = generateSeoRecommendations(projectId);
 
     res.json({
@@ -609,9 +609,9 @@ app.get('/api/projects/:id/dashboard', (req, res) => {
 });
 
 // GEO Analysis Endpoint
-app.get('/api/projects/:id/geo', (req, res) => {
+app.get('/api/projects/:id/geo', async (req, res) => {
   try {
-    const geoData = getGeoAnalysis(req.params.id);
+    const geoData = await getGeoAnalysis(req.params.id);
     res.json(geoData);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -622,7 +622,7 @@ app.post('/api/projects/:id/geo/check', async (req, res) => {
   try {
     const projectId = req.params.id;
     await runGeoRankCheck(projectId);
-    const updatedGeoData = getGeoAnalysis(projectId);
+    const updatedGeoData = await getGeoAnalysis(projectId);
     res.json(updatedGeoData);
   } catch (err) {
     res.status(500).json({ error: err.message });
