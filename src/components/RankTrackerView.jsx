@@ -267,31 +267,6 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           </span>
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button 
-              className="btn btn-secondary" 
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/supabase/import-course-keywords', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ projectId })
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    alert(`✓ Succesvol ${data.imported} cursus-zoekwoorden & URL's geïmporteerd uit Supabase!`);
-                    fetchKeywords();
-                  } else {
-                    alert(`Fout: ${data.error}`);
-                  }
-                } catch (e) {
-                  alert(`Fout bij importeren uit Supabase: ${e.message}`);
-                }
-              }}
-              style={{ background: '#059669', color: '#ffffff', borderColor: '#059669', padding: '5px 10px', fontSize: '0.8rem' }}
-            >
-              <RefreshCw size={14} /> Sync Cursussen uit Supabase
-            </button>
-
             <button className="btn btn-primary" onClick={handleCheckRankings} disabled={checking} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
               {checking ? (
                 <>
