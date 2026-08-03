@@ -3,26 +3,102 @@ const cheerio = require('cheerio');
 const { URL } = require('url');
 
 class Crawler {
-  constructor(startUrl, maxPages = 30) {
+  constructor(startUrl, maxPages = 500) {
     this.startUrl = startUrl;
     this.maxPages = maxPages;
     this.visited = new Set();
     this.queue = [startUrl];
     this.baseUrl = new URL(startUrl).origin;
     this.results = [];
+    this.concurrency = 10; // 10 parallel HTTP requests tegelijk voor hoge snelheid
+  }
+
+  async loadSitemapUrls() {
+    const sitemapCandidates = [
+      `${this.baseUrl}/sitemap.xml`,
+      `${this.baseUrl}/sitemap_index.xml`,
+      `${this.baseUrl}/sitemap-0.xml`
+    ];
+
+    for (const smUrl of sitemapCandidates) {
+      try {
+        const res = await axios.get(smUrl, {
+          timeout: 5000,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravitySEOCrawler/1.0' }
+        });
+
+        if (res.status === 200 && typeof res.data === 'string') {
+          const matches = (res.data.match(/<loc>(.*?)<\/loc>/gi) || []).map(m => m.replace(/<\/?loc>/gi, '').trim());
+          for (const loc of matches) {
+            if (loc.startsWith(this.baseUrl)) {
+              const cleanLoc = loc.split('#')[0];
+              if (!this.queue.includes(cleanLoc)) {
+                this.queue.push(cleanLoc);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Sitemap niet aanwezig of fout; ga door met normale link-discovery
+      }
+    }
   }
 
   async run(onProgress) {
     const startTime = Date.now();
-    
+
+    // 1. Haal eventuele sitemap URLs alvast op om alle pagina's/artikelen snel te ontdekken
+    await this.loadSitemapUrls();
+
+    // 2. Parallelle crawling in batches
     while (this.queue.length > 0 && this.visited.size < this.maxPages) {
-      const currentUrl = this.queue.shift();
-      if (this.visited.has(currentUrl)) continue;
+      const batch = [];
 
-      this.visited.add(currentUrl);
+      while (this.queue.length > 0 && batch.length < this.concurrency && (this.visited.size + batch.length) < this.maxPages) {
+        const url = this.queue.shift();
+        if (!this.visited.has(url)) {
+          this.visited.add(url);
+          batch.push(url);
+        }
+      }
 
-      try {
-        const pageData = await this.crawlPage(currentUrl);
+      if (batch.length === 0) break;
+
+      const batchResults = await Promise.allSettled(
+        batch.map(url => this.crawlPage(url))
+      );
+
+      for (let i = 0; i < batchResults.length; i++) {
+        const res = batchResults[i];
+        const currentUrl = batch[i];
+
+        let pageData;
+        if (res.status === 'fulfilled') {
+          pageData = res.value;
+        } else {
+          pageData = {
+            url: currentUrl,
+            status_code: res.reason?.response ? res.reason.response.status : 500,
+            title: 'Fout bij laden',
+            title_length: 0,
+            meta_description: '',
+            meta_description_length: 0,
+            h1: '',
+            h1_count: 0,
+            h2_count: 0,
+            canonical: '',
+            robots: '',
+            images_total: 0,
+            images_missing_alt: 0,
+            word_count: 0,
+            keywords: '',
+            links_internal_count: 0,
+            links_external_count: 0,
+            broken_links: JSON.stringify([]),
+            load_time_ms: 0
+          };
+        }
+
         this.results.push(pageData);
 
         if (onProgress) {
@@ -34,35 +110,14 @@ class Crawler {
           });
         }
 
+        // Voeg ontdekte interne links toe aan de wachtrij
         if (pageData.internalLinks) {
           for (const link of pageData.internalLinks) {
-            if (!this.visited.has(link) && !this.queue.includes(link) && this.visited.size + this.queue.length < this.maxPages * 3) {
+            if (!this.visited.has(link) && !this.queue.includes(link) && (this.visited.size + this.queue.length) < this.maxPages * 2) {
               this.queue.push(link);
             }
           }
         }
-      } catch (err) {
-        this.results.push({
-          url: currentUrl,
-          status_code: err.response ? err.response.status : 500,
-          title: 'Fout bij laden',
-          title_length: 0,
-          meta_description: '',
-          meta_description_length: 0,
-          h1: '',
-          h1_count: 0,
-          h2_count: 0,
-          canonical: '',
-          robots: '',
-          images_total: 0,
-          images_missing_alt: 0,
-          word_count: 0,
-          keywords: '',
-          links_internal_count: 0,
-          links_external_count: 0,
-          broken_links: JSON.stringify([]),
-          load_time_ms: 0
-        });
       }
     }
 
@@ -96,7 +151,7 @@ class Crawler {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AntigravitySEOCrawler/1.0'
       },
-      timeout: 8000
+      timeout: 6000
     });
 
     const loadTimeMs = Date.now() - pageStartTime;
