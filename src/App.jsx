@@ -200,7 +200,7 @@ export default function App() {
                 <Network className="nav-item-icon" /> Interne Link Matrix
               </li>
               <li className={`nav-item ${activeTab === 'schemagen' ? 'active' : ''}`} onClick={() => setActiveTab('schemagen')}>
-                <Code className="nav-item-icon" /> Schema.org Generator
+                <Code className="nav-item-icon" /> Schema.org Audit
               </li>
               <li className={`nav-item ${activeTab === 'pagespeed' ? 'active' : ''}`} onClick={() => setActiveTab('pagespeed')}>
                 <Zap className="nav-item-icon" /> PageSpeed Insights
@@ -228,7 +228,7 @@ export default function App() {
               {activeTab === 'contentoptimizer' && 'AI Content Generator & Title Tag Optimizer'}
               {activeTab === 'localpack' && 'Google Maps & Local Pack Audit (Google Top 3 D-pack)'}
               {activeTab === 'gsc' && 'Google Search Console Audit & Plan van Aanpak'}
-              {activeTab === 'schemagen' && 'AI Schema.org JSON-LD Rich Snippet Generator'}
+              {activeTab === 'schemagen' && 'Schema.org Audit — Implementatiecheck'}
               {activeTab === 'singlepage' && 'Single Page SEO Doctor & AI Prompt Generator'}
               {activeTab === 'topicclusters' && 'Topic Clusters & Pillar Page Analyzer'}
               {activeTab === 'internallinks' && 'Interne Link Matrix & Weespagina Detector'}

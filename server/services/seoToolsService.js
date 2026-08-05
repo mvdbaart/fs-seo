@@ -126,144 +126,499 @@ Het team van ${napInfo.name}`;
   };
 }
 
-// 2. Schema.org JSON-LD Generator (sjablonen op basis van project + instellingen)
-function getSchemaGenerator(projectId) {
+// 2. Schema.org Audit — detecteert en valideert JSON-LD op gecrawlde pagina's
+async function getSchemaAudit(projectId) {
   const project = getProject(projectId);
   if (!project) throw new Error('Project niet gevonden');
   const domain = project.domain;
-  const businessName = getSetting('business_name') || project.name;
-  const address = getSetting('business_address') || '[Straat + huisnummer, postcode, plaats]';
-  const phone = getSetting('business_phone') || '[Telefoonnummer]';
 
-  const addressParts = address.split(',').map(s => s.trim());
+  // Haal gecrawlde pagina's op uit de laatste crawl-sessie
+  const lastSession = db.prepare(
+    'SELECT * FROM crawl_sessions WHERE project_id = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(projectId);
 
-  const schemas = {
-    localBusiness: {
-      title: 'LocalBusiness (Homepage & Contact)',
-      jsonLd: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "LocalBusiness",
-        "name": businessName,
-        "url": domain,
-        "logo": `${domain}/logo.png`,
-        "address": {
-          "@type": "PostalAddress",
-          "streetAddress": addressParts[0] || address,
-          "addressLocality": addressParts[2] || addressParts[1] || '[Plaats]',
-          "postalCode": addressParts[1] || '[Postcode]',
-          "addressCountry": "NL"
-        },
-        "telephone": phone
-      }, null, 2)
+  if (!lastSession) {
+    return {
+      noCrawlData: true,
+      domain,
+      message: 'Nog geen crawl uitgevoerd. Start eerst een crawl via de On-Page Crawler om de schema-audit te starten.',
+      summary: { correct: 0, missing: 0, warnings: 0, totalPages: 0 },
+      schemaTypeSummary: [],
+      pageResults: [],
+      priorityAdvice: []
+    };
+  }
+
+  const crawledPages = db.prepare(
+    'SELECT url, title, h1 FROM crawled_pages WHERE session_id = ? ORDER BY id ASC'
+  ).all(lastSession.id);
+
+  if (!crawledPages.length) {
+    return {
+      noCrawlData: true,
+      domain,
+      message: 'De laatste crawl bevat geen pagina\'s. Voer een nieuwe crawl uit.',
+      summary: { correct: 0, missing: 0, warnings: 0, totalPages: 0 },
+      schemaTypeSummary: [],
+      pageResults: [],
+      priorityAdvice: []
+    };
+  }
+
+  // Validatieregels per schema-type: verplichte velden
+  const SCHEMA_RULES = {
+    // Core types
+    LocalBusiness:            { required: ['name', 'address', 'telephone'], recommended: ['url', 'logo', 'openingHours'] },
+    Organization:             { required: ['name', 'url'], recommended: ['logo', 'contactPoint', 'sameAs'] },
+    WebSite:                  { required: ['name', 'url'], recommended: ['potentialAction'] },
+    Service:                  { required: ['name', 'provider'], recommended: ['description', 'areaServed'] },
+    FAQPage:                  { required: ['mainEntity'], recommended: [] },
+    BreadcrumbList:           { required: ['itemListElement'], recommended: [] },
+    JobPosting:               { required: ['title', 'description', 'datePosted', 'hiringOrganization', 'jobLocation'], recommended: ['baseSalary', 'validThrough', 'employmentType'] },
+    Article:                  { required: ['headline', 'author', 'datePublished'], recommended: ['image', 'publisher'] },
+    BlogPosting:              { required: ['headline', 'author', 'datePublished'], recommended: ['image', 'publisher'] },
+    NewsArticle:              { required: ['headline', 'author', 'datePublished'], recommended: ['image', 'publisher'] },
+    ContactPoint:             { required: ['telephone', 'contactType'], recommended: ['areaServed', 'availableLanguage'] },
+    Product:                  { required: ['name'], recommended: ['description', 'offers', 'image'] },
+    Review:                   { required: ['reviewRating', 'author'], recommended: ['reviewBody'] },
+    AggregateRating:          { required: ['ratingValue', 'reviewCount'], recommended: ['bestRating', 'worstRating'] },
+    Event:                    { required: ['name', 'startDate', 'location'], recommended: ['description', 'endDate'] },
+    // LocalBusiness subtypes
+    EducationalOrganization:  { required: ['name'], recommended: ['url', 'address', 'telephone', 'logo'] },
+    School:                   { required: ['name'], recommended: ['url', 'address', 'telephone'] },
+    CollegeOrUniversity:      { required: ['name'], recommended: ['url', 'address', 'telephone'] },
+    // List types
+    ItemList:                 { required: ['itemListElement'], recommended: ['numberOfItems', 'name'] },
+    // Other common types
+    Person:                   { required: ['name'], recommended: ['url', 'jobTitle', 'email'] },
+    Place:                    { required: ['name'], recommended: ['address', 'geo'] },
+    WebPage:                  { required: ['name', 'url'], recommended: ['description', 'breadcrumb'] },
+    SiteLinksSearchBox:       { required: ['url', 'potentialAction'], recommended: [] },
+    // Course & Education
+    Course:                   { required: ['name', 'description'], recommended: ['provider', 'hasCourseInstance', 'offers'] },
+    // Page types
+    ContactPage:              { required: ['name'], recommended: ['url', 'description'] },
+    AboutPage:                { required: ['name'], recommended: ['url', 'description'] },
+  };
+
+
+  // Schema.org type-hiërarchie: welke concrete types voldoen aan een verwacht type?
+  // Bijv. EducationalOrganization is een subtype van LocalBusiness — Google accepteert dit ook zo.
+  const SCHEMA_SATISFIES = {
+    LocalBusiness: [
+      'LocalBusiness', 'EducationalOrganization', 'School', 'CollegeOrUniversity',
+      'FoodEstablishment', 'Restaurant', 'Bakery', 'CafeOrCoffeeShop', 'FastFoodRestaurant',
+      'Store', 'BookStore', 'ClothingStore', 'ElectronicsStore', 'GroceryStore',
+      'HardwareStore', 'HomeGoodsStore', 'JewelryStore', 'LiquorStore', 'MensClothingStore',
+      'MovieRentalStore', 'MusicStore', 'OfficeEquipmentStore', 'OutletStore', 'PetStore',
+      'ShoeStore', 'SportingGoodsStore', 'TireShop', 'ToyStore', 'WholesaleStore',
+      'AutomotiveBusiness', 'AutoBodyShop', 'AutoDealer', 'AutoPartsStore', 'AutoRental',
+      'AutoRepair', 'AutoWash', 'GasStation', 'MotorcycleDealer', 'MotorcycleRepair',
+      'ChildCare', 'DryCleaningOrLaundry', 'EmergencyService', 'EmploymentAgency',
+      'EntertainmentBusiness', 'FinancialService', 'FoodEstablishment', 'GovernmentOffice',
+      'HealthAndBeautyBusiness', 'BeautySalon', 'DaySpa', 'HairSalon', 'HealthClub',
+      'NailSalon', 'TattooParlor', 'HomeAndConstructionBusiness', 'Electrician',
+      'GeneralContractor', 'HVACBusiness', 'HousePainter', 'Locksmith', 'MovingCompany',
+      'Plumber', 'RoofingContractor', 'InternetCafe', 'LegalService', 'Attorney',
+      'Notary', 'LodgingBusiness', 'BedAndBreakfast', 'Hostel', 'Hotel', 'Motel',
+      'Resort', 'MedicalBusiness', 'Dentist', 'DiagnosticLab', 'Hospital', 'MedicalClinic',
+      'Optician', 'Pharmacy', 'Physician', 'VeterinaryCare',
+      'ProfessionalService', 'AccountingService', 'InsuranceAgency', 'RealEstateAgent',
+      'RecyclingCenter', 'SelfStorage', 'ShoppingCenter', 'SportingGoodsStore',
+      'TouristInformationCenter', 'TravelAgency'
+    ],
+    Organization: [
+      'Organization', 'LocalBusiness', 'EducationalOrganization', 'School',
+      'CollegeOrUniversity', 'Corporation', 'GovernmentOrganization', 'NGO',
+      'NewsMediaOrganization', 'OnlineBusiness', 'SportsOrganization', 'WorkersUnion'
+    ],
+    Article: ['Article', 'BlogPosting', 'NewsArticle', 'TechArticle', 'ScholarlyArticle', 'Report'],
+    Service: ['Service', 'FinancialProduct', 'GovernmentService', 'TaxiService'],
+    Course: ['Course', 'EducationalOccupationalProgram', 'CourseInstance'],
+  };
+
+  // Controleer of een gevonden type voldoet aan een verwacht type (inclusief subtypes)
+  function isSatisfiedBy(expectedType, foundTypes) {
+    const satisfiers = SCHEMA_SATISFIES[expectedType] || [expectedType];
+    return foundTypes.some(f => satisfiers.includes(f));
+  }
+
+
+  // Verwachte schema's per paginatype (op basis van URL-patronen)
+  const PAGE_TYPE_RULES = [
+    {
+      type: 'Homepage',
+      match: (url) => {
+        try {
+          const u = new URL(url);
+          return u.pathname === '/' || u.pathname === '';
+        } catch { return false; }
+      },
+      expected: ['LocalBusiness', 'WebSite'],
+      priority: 'Kritiek'
     },
-    service: {
-      title: 'Service Schema (Dienstenpagina\'s)',
-      jsonLd: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "Service",
-        "name": "[Naam van de dienst]",
-        "description": "[Korte beschrijving van de dienst]",
-        "provider": {
-          "@type": "LocalBusiness",
-          "name": businessName,
-          "sameAs": domain
-        },
-        "areaServed": "[Regio / plaats]"
-      }, null, 2)
+    {
+      type: 'Vacature overzicht',
+      match: (url) => {
+        try {
+          const p = new URL(url).pathname.replace(/\/$/, '');
+          return /^\/(vacatures|vacature|jobs|werken-bij)$/i.test(p);
+        } catch { return false; }
+      },
+      expected: ['BreadcrumbList'],
+      priority: 'Aanbevolen'
     },
-    faqPage: {
-      title: 'FAQPage Schema (Veelgestelde Vragen)',
-      jsonLd: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "[Vraag 1]",
-            "acceptedAnswer": { "@type": "Answer", "text": "[Antwoord 1]" }
-          },
-          {
-            "@type": "Question",
-            "name": "[Vraag 2]",
-            "acceptedAnswer": { "@type": "Answer", "text": "[Antwoord 2]" }
-          }
-        ]
-      }, null, 2)
+    {
+      type: 'Vacaturepagina',
+      match: (url) => /vacature|vacancies|job|werk|functie/i.test(url),
+      expected: ['JobPosting', 'BreadcrumbList'],
+      priority: 'Hoog'
     },
-    breadcrumb: {
-      title: 'BreadcrumbList Schema (Alle pagina\'s)',
-      jsonLd: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        "itemListElement": [
-          { "@type": "ListItem", "position": 1, "name": "Home", "item": domain },
-          { "@type": "ListItem", "position": 2, "name": "[Pagina]", "item": `${domain}/[pagina]` }
-        ]
-      }, null, 2)
+    {
+      type: 'Opleiding / Cursus',
+      match: (url) => /opleiding|cursus|training|les/i.test(url),
+      expected: ['Course', 'BreadcrumbList'],
+      priority: 'Aanbevolen'
     },
-    jobPosting: {
-      title: 'JobPosting Schema (Vacatures voor Google Jobs)',
-      jsonLd: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "JobPosting",
-        "title": "[Functietitel, bijv. Procesoperator 5-ploegen]",
-        "description": "<p>[Uitgebreide functieomschrijving, eisen en secundaire arbeidsvoorwaarden]</p>",
-        "identifier": {
-          "@type": "PropertyValue",
-          "name": businessName,
-          "value": "[Vacature-ID]"
-        },
-        "datePosted": new Date().toISOString().split('T')[0],
-        "validThrough": new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
-        "employmentType": "FULL_TIME",
-        "hiringOrganization": {
-          "@type": "Organization",
-          "name": businessName,
-          "sameAs": domain,
-          "logo": `${domain}/logo.png`
-        },
-        "jobLocation": {
-          "@type": "Place",
-          "address": {
-            "@type": "PostalAddress",
-            "streetAddress": addressParts[0] || address,
-            "addressLocality": addressParts[2] || addressParts[1] || 'Eindhoven',
-            "postalCode": addressParts[1] || '[Postcode]',
-            "addressCountry": "NL"
-          }
-        },
-        "baseSalary": {
-          "@type": "MonetaryAmount",
-          "currency": "EUR",
-          "value": {
-            "@type": "QuantitativeValue",
-            "minValue": 2500,
-            "maxValue": 3800,
-            "unitText": "MONTH"
-          }
+    {
+      type: 'FAQ / Help',
+      match: (url) => /faq|veelgesteld|vragen|help/i.test(url),
+      expected: ['FAQPage', 'BreadcrumbList'],
+      priority: 'Hoog'
+    },
+    {
+      type: 'Contactpagina',
+      match: (url) => /contact/i.test(url),
+      expected: ['LocalBusiness', 'ContactPoint'],
+      priority: 'Hoog'
+    },
+    {
+      type: 'Blog overzicht',
+      match: (url) => {
+        try {
+          const p = new URL(url).pathname.replace(/\/$/, '');
+          return /^\/(blog|nieuws|artikelen|news)$/i.test(p);
+        } catch { return false; }
+      },
+      expected: ['BreadcrumbList'],
+      priority: 'Aanbevolen'
+    },
+    {
+      type: 'Dienstenpagina',
+      match: (url) => /dienst|service|oplossing|aanpak|wat-we-doen/i.test(url),
+      expected: ['Service', 'BreadcrumbList'],
+      priority: 'Aanbevolen'
+    },
+    {
+      type: 'Blog / Artikel',
+      match: (url) => /blog|nieuws|artikel|news|update/i.test(url),
+      expected: ['Article', 'BreadcrumbList'],
+      priority: 'Aanbevolen'
+    },
+    {
+      type: 'Overige pagina',
+      match: () => true,
+      expected: ['BreadcrumbList'],
+      priority: 'Optioneel'
+    }
+  ];
+
+
+  // Detecteer paginatype
+  function detectPageType(url) {
+    for (const rule of PAGE_TYPE_RULES) {
+      if (rule.match(url)) return rule;
+    }
+    return PAGE_TYPE_RULES[PAGE_TYPE_RULES.length - 1];
+  }
+
+  // Valideer een gevonden schema-object
+  function validateSchema(schemaObj) {
+    const type = schemaObj['@type'];
+    if (!type) return { valid: false, warnings: ['Geen @type gevonden'] };
+    const typeName = Array.isArray(type) ? type[0] : type;
+    const rules = SCHEMA_RULES[typeName];
+    if (!rules) return { valid: true, warnings: [`Onbekend schema-type "${typeName}" — geen veldvalidatie beschikbaar`] };
+
+
+    const missing = rules.required.filter(f => !schemaObj[f]);
+    const missingRecommended = rules.recommended.filter(f => !schemaObj[f]);
+
+    return {
+      valid: missing.length === 0,
+      missingRequired: missing,
+      missingRecommended,
+      warnings: [
+        ...missing.map(f => `Verplicht veld ontbreekt: "${f}"`),
+        ...missingRecommended.map(f => `Aanbevolen veld ontbreekt: "${f}"`)
+      ]
+    };
+  }
+
+  // Extraheer JSON-LD blokken uit HTML tekst
+  function extractJsonLd(html) {
+    const schemas = [];
+    const regex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        if (Array.isArray(parsed)) {
+          schemas.push(...parsed);
+        } else {
+          schemas.push(parsed);
         }
-      }, null, 2)
-    },
-    contactPoint: {
-      title: 'ContactPoint & Organization (Contactpagina)',
-      jsonLd: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "Organization",
-        "name": businessName,
-        "url": domain,
-        "logo": `${domain}/logo.png`,
-        "contactPoint": {
-          "@type": "ContactPoint",
-          "telephone": phone,
-          "contactType": "customer service",
-          "areaServed": "NL",
-          "availableLanguage": ["Dutch", "English"]
-        }
-      }, null, 2)
+      } catch (e) {
+        schemas.push({ __parseError: true, raw: match[1].substring(0, 100) });
+      }
+    }
+    return schemas;
+  }
+
+  // Extraheer ALLE @type waarden recursief uit een JSON-LD object (incl. geneste types)
+  // Dit vindt bijv. ContactPoint genest binnen EducationalOrganization.contactPoint
+  function extractNestedTypes(obj, found = new Set()) {
+    if (!obj || typeof obj !== 'object') return found;
+    if (Array.isArray(obj)) {
+      for (const item of obj) extractNestedTypes(item, found);
+      return found;
+    }
+    if (obj['@type']) {
+      const types = Array.isArray(obj['@type']) ? obj['@type'] : [obj['@type']];
+      for (const t of types) found.add(t);
+    }
+    for (const [key, val] of Object.entries(obj)) {
+      if (key.startsWith('@')) continue; // sla @context, @type etc. over
+      if (val && typeof val === 'object') extractNestedTypes(val, found);
+    }
+    return found;
+  }
+
+  // Fetch pagina's parallel in batches van 15 voor hoge snelheid bij 300+ pagina's
+  const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+  const BATCH_SIZE = 15;
+  const pageResults = [];
+
+  async function processPage(page) {
+    const pageTypeRule = detectPageType(page.url);
+    let foundSchemas = [];
+    let fetchError = null;
+
+    try {
+      const response = await fetch(page.url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SEOAuditBot/1.0)' },
+        timeout: 6000
+      });
+      const html = await response.text();
+      foundSchemas = extractJsonLd(html);
+    } catch (err) {
+      fetchError = err.message;
+    }
+
+    const validatedSchemas = foundSchemas
+      .filter(s => !s.__parseError)
+      .map(s => {
+        const type = Array.isArray(s['@type']) ? s['@type'][0] : s['@type'];
+        const validation = validateSchema(s);
+        return {
+          type: type || 'Onbekend',
+          valid: validation.valid,
+          warnings: validation.warnings,
+          missingRequired: validation.missingRequired || [],
+          missingRecommended: validation.missingRecommended || []
+        };
+      });
+
+    const parseErrors = foundSchemas.filter(s => s.__parseError).length;
+    const foundTypes = validatedSchemas.map(s => s.type);
+    const allTypesSet = new Set(foundTypes);
+    for (const s of foundSchemas.filter(s => !s.__parseError)) {
+      extractNestedTypes(s, allTypesSet);
+    }
+    const allFoundTypes = [...allTypesSet];
+    const missingExpected = pageTypeRule.expected.filter(t => !isSatisfiedBy(t, allFoundTypes));
+
+    const hasWarnings = validatedSchemas.some(s => !s.valid) || parseErrors > 0;
+    const status = fetchError ? 'fetch-error'
+      : (missingExpected.length === 0 && !hasWarnings) ? 'correct'
+      : (missingExpected.length > 0 && foundTypes.length === 0) ? 'missing'
+      : 'warning';
+
+    return {
+      url: page.url,
+      title: page.title || page.url,
+      pageType: pageTypeRule.type,
+      priority: pageTypeRule.priority,
+      foundTypes,
+      allFoundTypes,
+      expectedTypes: pageTypeRule.expected,
+      missingExpected,
+      validatedSchemas,
+      parseErrors,
+      fetchError,
+      status
+    };
+  }
+
+  for (let i = 0; i < crawledPages.length; i += BATCH_SIZE) {
+    const batch = crawledPages.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(batch.map(processPage));
+    pageResults.push(...results);
+  }
+
+
+
+  // Samenvatting per schema-type (gebruikt isSatisfiedBy voor subtypes & geneste types)
+  const CORE_TYPES = ['LocalBusiness', 'WebSite', 'BreadcrumbList', 'ContactPoint', 'JobPosting', 'FAQPage', 'Service'];
+  const allExpectedTypes = [...new Set([...CORE_TYPES, ...PAGE_TYPE_RULES.flatMap(r => r.expected)])];
+
+  const schemaTypeSummary = allExpectedTypes.map(typeName => {
+    const pagesNeedingIt = pageResults.filter(p => p.expectedTypes.includes(typeName));
+    const pagesWithIt = pageResults.filter(p => isSatisfiedBy(typeName, p.allFoundTypes || p.foundTypes));
+    const validPages = pagesWithIt.filter(p => !p.validatedSchemas.some(s => !s.valid));
+
+    const pagesFound = pagesWithIt.length;
+    const pagesNeeded = pagesNeedingIt.length;
+    const validCount = validPages.length;
+
+    let status = 'correct';
+    if (pagesFound === 0 && pagesNeeded > 0) {
+      status = 'missing';
+    } else if (pagesFound < pagesNeeded || validCount < pagesFound) {
+      status = 'warning';
+    } else if (pagesFound === 0 && pagesNeeded === 0) {
+      status = 'info';
+    }
+
+    return {
+      type: typeName,
+      pagesFound,
+      pagesNeeded,
+      validCount,
+      status
+    };
+  }).filter(s => s.pagesNeeded > 0 || s.pagesFound > 0 || s.type === 'JobPosting');
+
+  // Vacature (JobPosting) specifieke statistieken
+  const pagesWithJobPosting = pageResults.filter(p => isSatisfiedBy('JobPosting', p.allFoundTypes || p.foundTypes));
+  const validJobPostings = pagesWithJobPosting.filter(p => p.validatedSchemas.some(s => s.type === 'JobPosting' && s.valid));
+
+  // Globale samenvatting
+  const correct = pageResults.filter(p => p.status === 'correct').length;
+  const missing = pageResults.filter(p => p.status === 'missing').length;
+  const warnings = pageResults.filter(p => p.status === 'warning' || p.status === 'fetch-error').length;
+  const summary = {
+    correct,
+    missing,
+    warnings,
+    totalPages: pageResults.length,
+    jobPostings: {
+      total: pagesWithJobPosting.length,
+      valid: validJobPostings.length,
+      complete: validJobPostings.length
     }
   };
 
-  return schemas;
+
+  // Prioriteitsadvies
+  const priorityAdvice = [];
+
+  const homepageResult = pageResults.find(p => p.pageType === 'Homepage');
+  if (homepageResult && homepageResult.missingExpected.length > 0) {
+    priorityAdvice.push({
+      priority: 'Kritiek',
+      icon: '🔴',
+      title: `Homepage mist schema's: ${homepageResult.missingExpected.join(', ')}`,
+      description: 'LocalBusiness en WebSite schema\'s op de homepage zijn cruciaal voor Google\'s Knowledge Panel en rich snippets. Implementeer deze direct.',
+      affectedUrl: homepageResult.url
+    });
+  }
+
+  const jobPages = pageResults.filter(p => p.pageType === 'Vacaturepagina' && p.missingExpected.includes('JobPosting'));
+  if (jobPages.length > 0) {
+    priorityAdvice.push({
+      priority: 'Kritiek',
+      icon: '🔴',
+      title: `${jobPages.length} vacaturepagina(\'s) zonder JobPosting schema`,
+      description: 'Zonder JobPosting schema verschijnen uw vacatures niet in Google Jobs, waarmee u gratis kandidaten misloopt.',
+      affectedUrl: jobPages[0].url
+    });
+  }
+
+  const faqPages = pageResults.filter(p => p.pageType === 'FAQ / Help' && p.missingExpected.includes('FAQPage'));
+  if (faqPages.length > 0) {
+    priorityAdvice.push({
+      priority: 'Hoog',
+      icon: '🟠',
+      title: `${faqPages.length} FAQ-pagina(\'s) zonder FAQPage schema`,
+      description: 'FAQPage schema genereert FAQ rich snippets in Google, wat de CTR met 20-30% kan verhogen.',
+      affectedUrl: faqPages[0].url
+    });
+  }
+
+  const noBreachPages = pageResults.filter(p => p.missingExpected.includes('BreadcrumbList') && p.pageType !== 'Homepage');
+  if (noBreachPages.length > 0) {
+    priorityAdvice.push({
+      priority: 'Aanbevolen',
+      icon: '🟡',
+      title: `${noBreachPages.length} pagina(\'s) zonder BreadcrumbList schema`,
+      description: 'BreadcrumbList schema toont de paginastructuur in Google-zoekresultaten (breadcrumbs), wat de CTR en gebruikservaring verbetert.',
+      affectedUrl: noBreachPages[0].url
+    });
+  }
+
+  const parseErrorPages = pageResults.filter(p => p.parseErrors > 0);
+  if (parseErrorPages.length > 0) {
+    priorityAdvice.push({
+      priority: 'Kritiek',
+      icon: '🔴',
+      title: `Ongeldige JSON-LD op ${parseErrorPages.length} pagina(\'s)`,
+      description: 'Google kan schema\'s met JSON-syntaxfouten niet verwerken. Controleer de schema-code direct met het Google Rich Results Test tool.',
+      affectedUrl: parseErrorPages[0].url
+    });
+  }
+
+  const invalidSchemaPages = pageResults.filter(p => p.validatedSchemas.some(s => !s.valid && s.missingRequired && s.missingRequired.length > 0));
+  if (invalidSchemaPages.length > 0) {
+    priorityAdvice.push({
+      priority: 'Hoog',
+      icon: '🟠',
+      title: `Onvolledige schema\'s op ${invalidSchemaPages.length} pagina(\'s)`,
+      description: 'Verplichte velden ontbreken — Google accepteert deze schema\'s mogelijk niet voor rich snippets. Controleer de details per pagina hieronder.',
+      affectedUrl: invalidSchemaPages[0].url
+    });
+  }
+
+  const contactPages = pageResults.filter(p => p.pageType === 'Contactpagina' && p.missingExpected.length > 0);
+  if (contactPages.length > 0) {
+    priorityAdvice.push({
+      priority: 'Aanbevolen',
+      icon: '🟡',
+      title: `Contactpagina mist ContactPoint of LocalBusiness schema`,
+      description: 'Voeg een ContactPoint schema toe aan de contactpagina voor betere weergave in Google My Business en voice search.',
+      affectedUrl: contactPages[0].url
+    });
+  }
+
+  if (priorityAdvice.length === 0 && correct === pageResults.length) {
+    priorityAdvice.push({
+      priority: 'Goed',
+      icon: '✅',
+      title: 'Alle gedetecteerde schema\'s zijn correct geïmplementeerd',
+      description: 'Uitstekend werk! Overweeg ook Product, Review of Event schema\'s toe te voegen voor extra rich snippet mogelijkheden.',
+      affectedUrl: null
+    });
+  }
+
+  return {
+    noCrawlData: false,
+    domain,
+    lastCrawlDate: lastSession.created_at,
+    summary,
+    schemaTypeSummary,
+    pageResults,
+    priorityAdvice
+  };
 }
 
 // 3. Internal Link Matrix & Orphan Page Finder — op basis van de echte link-graph uit de crawl
@@ -523,7 +878,8 @@ function detectCannibalization(rankingsWithSnapshots, ownDomain, businessName = 
 
 module.exports = {
   getLocalPackAudit,
-  getSchemaGenerator,
+  getSchemaAudit,
   getInternalLinkMatrix,
   getCompetitorGapAnalysis
 };
+

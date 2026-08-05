@@ -1,5 +1,5 @@
 {
-  "name": "seo-rank-tracker-crawler",
+  "name": "fs-seo",
   "version": "1.0.0",
   "description": "Nederlandse Keyword Rank Tracker & Screaming Frog style Web App",
   "main": "server/index.js",

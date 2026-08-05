@@ -14,7 +14,7 @@ const { analyzeSinglePage } = require('./services/pageAnalyzer');
 const { analyzeGscData } = require('./services/gscAnalyzer');
 const { 
   getLocalPackAudit, 
-  getSchemaGenerator, 
+  getSchemaAudit, 
   getInternalLinkMatrix, 
   getCompetitorGapAnalysis 
 } = require('./services/seoToolsService');
@@ -259,9 +259,9 @@ app.get('/api/projects/:id/local-pack', (req, res) => {
   }
 });
 
-app.get('/api/projects/:id/schema-generator', (req, res) => {
+app.get('/api/projects/:id/schema-audit', async (req, res) => {
   try {
-    const data = getSchemaGenerator(req.params.id);
+    const data = await getSchemaAudit(req.params.id);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
