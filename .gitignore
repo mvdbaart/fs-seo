@@ -2,9 +2,10 @@
 node_modules/
 .pnpm-store/
 
-# Production build output
+# Production build output & dev cache
 dist/
 build/
+.vite/
 
 # Local environment & secret files
 .env
