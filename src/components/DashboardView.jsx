@@ -114,10 +114,12 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
             </div>
           </div>
           <div className="stat-value">
-            {pageSpeed ? `${pageSpeed.performance_score}/100` : '78/100'}
+            {pageSpeed ? `${pageSpeed.performance_score}/100` : '—'}
           </div>
           <div className="stat-subtext">
-            Core Web Vitals LCP: {pageSpeed?.lcp || '2.4s'}
+            {pageSpeed
+              ? `Core Web Vitals LCP: ${pageSpeed.lcp || 'onbekend'}`
+              : 'Nog niet gemeten — draai een PageSpeed audit'}
           </div>
         </div>
 
