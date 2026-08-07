@@ -15,6 +15,7 @@ export default function SettingsView({ activeProject, onProjectChange }) {
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [clarityProjectId, setClarityProjectId] = useState('');
   const [githubToken, setGithubToken] = useState('');
+  const [keyHints, setKeyHints] = useState({ pagespeed: '', serp: '', github: '' });
   const [githubRepo, setGithubRepo] = useState('FrisseStart/fs-next');
   const [remoteFsNextUrl, setRemoteFsNextUrl] = useState('');
   const [githubStatus, setGithubStatus] = useState(null);
@@ -35,15 +36,19 @@ export default function SettingsView({ activeProject, onProjectChange }) {
     try {
       const res = await fetch('/api/settings');
       const data = await res.json();
-      if (data.pagespeed_api_key) setPagespeedKey(data.pagespeed_api_key);
-      if (data.serp_api_key) setSerpKey(data.serp_api_key);
+      // Geheimen komen niet meer mee uit de API; alleen of ze gezet zijn plus
+      // een hint. De velden blijven leeg — leeg laten = ongewijzigd.
+      setKeyHints({
+        pagespeed: data.pagespeed_api_key_set ? data.pagespeed_api_key_hint : '',
+        serp: data.serp_api_key_set ? data.serp_api_key_hint : '',
+        github: data.github_token_set ? data.github_token_hint : ''
+      });
       setGscConnected(Boolean(data.gsc_connected));
       if (data.business_name) setBusinessName(data.business_name);
       if (data.business_address) setBusinessAddress(data.business_address);
       if (data.business_phone) setBusinessPhone(data.business_phone);
       if (data.ga4_property_id) setGa4PropertyId(data.ga4_property_id);
       if (data.clarity_project_id) setClarityProjectId(data.clarity_project_id);
-      if (data.github_token) setGithubToken(data.github_token);
       if (data.github_repo) setGithubRepo(data.github_repo);
       if (data.remote_fs_next_url) setRemoteFsNextUrl(data.remote_fs_next_url);
       setAutoCheckEnabled(data.auto_check_enabled === '1');
@@ -80,20 +85,21 @@ export default function SettingsView({ activeProject, onProjectChange }) {
     e.preventDefault();
     try {
       const payload = {
-        pagespeed_api_key: pagespeedKey,
-        serp_api_key: serpKey,
         business_name: businessName,
         business_address: businessAddress,
         business_phone: businessPhone,
         ga4_property_id: ga4PropertyId,
         clarity_project_id: clarityProjectId,
-        github_token: githubToken,
         github_repo: githubRepo,
         remote_fs_next_url: remoteFsNextUrl,
         auto_check_enabled: autoCheckEnabled ? '1' : '0',
         auto_check_frequency: autoCheckFrequency,
         report_email_recipients: reportRecipients
       };
+      // Geheimen alleen meesturen als er daadwerkelijk iets is ingevuld.
+      if (pagespeedKey.trim()) payload.pagespeed_api_key = pagespeedKey.trim();
+      if (serpKey.trim()) payload.serp_api_key = serpKey.trim();
+      if (githubToken.trim()) payload.github_token = githubToken.trim();
       if (gscJson.trim()) payload.gsc_service_account_json = gscJson.trim();
 
       await fetch('/api/settings', {
@@ -196,9 +202,9 @@ export default function SettingsView({ activeProject, onProjectChange }) {
               Google PageSpeed Insights API Key (Optioneel)
             </label>
             <input 
-              type="text" 
+              type="password" 
               className="input-field" 
-              placeholder="AIzaSy..." 
+              placeholder={keyHints.pagespeed ? `Opgeslagen (${keyHints.pagespeed}) — laat leeg om te behouden` : "AIzaSy..."} 
               value={pagespeedKey}
               onChange={(e) => setPagespeedKey(e.target.value)}
             />
@@ -212,9 +218,9 @@ export default function SettingsView({ activeProject, onProjectChange }) {
               SERP API Key (Serper / DataForSEO / SerpAPI)
             </label>
             <input 
-              type="text" 
+              type="password" 
               className="input-field" 
-              placeholder="Sleutel voor live SERP scans..." 
+              placeholder={keyHints.serp ? `Opgeslagen (${keyHints.serp}) — laat leeg om te behouden` : "Sleutel voor live SERP scans..."} 
               value={serpKey}
               onChange={(e) => setSerpKey(e.target.value)}
             />

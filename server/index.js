@@ -32,7 +32,21 @@ const { generateAiContent } = require('./services/aiGenerator');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// Alleen de eigen dev-client mag de API benaderen. Met een wildcard kan elke
+// website die je bezoekt localhost:3001 uitlezen — en /api/settings bevat
+// API-keys. FS_SEO_ALLOWED_ORIGINS overschrijft de standaardlijst (komma-gescheiden).
+const allowedOrigins = (process.env.FS_SEO_ALLOWED_ORIGINS || 'http://localhost:3005,http://127.0.0.1:3005,http://localhost:3000,http://127.0.0.1:3000')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Geen Origin-header: curl, server-side calls en de Vite-proxy. Toestaan.
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origin niet toegestaan'));
+  }
+}));
 app.use(express.json());
 
 // ----------------------------------------------------
@@ -945,12 +959,17 @@ app.get('/api/pagespeed', (req, res) => {
 // ----------------------------------------------------
 // Settings Endpoints
 // ----------------------------------------------------
+// Sleutels die nooit als leesbare waarde de deur uit mogen. De client krijgt
+// per sleutel `<key>_set` (of hij ingevuld is) en `<key>_hint` (laatste 4 tekens,
+// genoeg om te zien wélke sleutel er staat) in plaats van de waarde zelf.
+const SECRET_SETTING_KEYS = ['pagespeed_api_key', 'serp_api_key', 'github_token', 'gsc_service_account_json'];
+
 app.get('/api/settings', (req, res) => {
   try {
     const settings = db.prepare('SELECT * FROM settings').all();
     const settingsObj = {};
     settings.forEach(s => settingsObj[s.key] = s.value);
-    
+
     const envPagespeedKey = process.env.FS_SEO_PAGESPEED_API || process.env.PAGESPEED_API_KEY || process.env.GOOGLE_PAGESPEED_API_KEY;
     if (envPagespeedKey && !settingsObj.pagespeed_api_key) {
       settingsObj.pagespeed_api_key = envPagespeedKey;
@@ -960,9 +979,14 @@ app.get('/api/settings', (req, res) => {
       settingsObj.serp_api_key = envSerpKey;
     }
 
-    // Nooit de service account JSON zelf naar de client sturen; alleen de status.
     settingsObj.gsc_connected = require('./services/gscClient').isConfigured();
-    delete settingsObj.gsc_service_account_json;
+
+    for (const key of SECRET_SETTING_KEYS) {
+      const value = settingsObj[key];
+      settingsObj[`${key}_set`] = Boolean(value);
+      if (value) settingsObj[`${key}_hint`] = `…${String(value).slice(-4)}`;
+      delete settingsObj[key];
+    }
 
     res.json(settingsObj);
   } catch (err) {
@@ -977,6 +1001,9 @@ app.post('/api/settings', (req, res) => {
     
     const transaction = db.transaction((obj) => {
       for (const [key, value] of Object.entries(obj)) {
+        // De client krijgt geheimen niet meer terug, dus een leeg veld betekent
+        // "niet gewijzigd" — anders wist elke opslagactie de opgeslagen sleutel.
+        if (SECRET_SETTING_KEYS.includes(key) && !String(value ?? '').trim()) continue;
         stmt.run(key, String(value));
       }
     });
