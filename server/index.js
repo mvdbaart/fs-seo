@@ -999,11 +999,17 @@ app.post('/api/settings', (req, res) => {
     const settingsObj = req.body;
     const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
     
+    const deleteStmt = db.prepare('DELETE FROM settings WHERE key = ?');
+
     const transaction = db.transaction((obj) => {
       for (const [key, value] of Object.entries(obj)) {
-        // De client krijgt geheimen niet meer terug, dus een leeg veld betekent
-        // "niet gewijzigd" — anders wist elke opslagactie de opgeslagen sleutel.
-        if (SECRET_SETTING_KEYS.includes(key) && !String(value ?? '').trim()) continue;
+        if (SECRET_SETTING_KEYS.includes(key)) {
+          // Expliciet null: sleutel wissen. Leeg veld: ongewijzigd laten — de
+          // client krijgt geheimen niet meer terug, dus een leeg invoerveld mag
+          // niet betekenen "verwijderen".
+          if (value === null) { deleteStmt.run(key); continue; }
+          if (!String(value ?? '').trim()) continue;
+        }
         stmt.run(key, String(value));
       }
     });

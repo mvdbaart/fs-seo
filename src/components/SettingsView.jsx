@@ -116,6 +116,20 @@ export default function SettingsView({ activeProject, onProjectChange }) {
     }
   };
 
+  const handleClearSecret = async (settingKey, label) => {
+    if (!window.confirm(`${label} verwijderen uit de instellingen?\nDit maakt de sleutel bij de provider niet ongeldig — trek hem daar apart in.`)) return;
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [settingKey]: null })
+      });
+      fetchSettings();
+    } catch (err) {
+      alert('Fout bij verwijderen sleutel: ' + err.message);
+    }
+  };
+
   const handleSendTestEmail = async () => {
     if (!reportRecipients) {
       alert('Vul eerst een of meerdere e-mailadressen in bij het veld e-mail ontvangers.');
@@ -204,13 +218,23 @@ export default function SettingsView({ activeProject, onProjectChange }) {
             <input 
               type="password" 
               className="input-field" 
-              placeholder={keyHints.pagespeed ? `Opgeslagen (${keyHints.pagespeed}) — laat leeg om te behouden` : "AIzaSy..."} 
+              placeholder={keyHints.pagespeed ? `Opgeslagen (${keyHints.pagespeed})` : "AIzaSy..."} 
               value={pagespeedKey}
               onChange={(e) => setPagespeedKey(e.target.value)}
             />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
               Laat leeg om de gratis openbare Google API-limiet te gebruiken.
             </span>
+            {keyHints.pagespeed && (
+              <button
+                type="button"
+                onClick={() => handleClearSecret('pagespeed_api_key', 'PageSpeed API key')}
+                style={{ background: 'none', border: 'none', padding: 0, marginLeft: '8px', color: 'var(--danger)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Verwijderen
+              </button>
+            )}
+
           </div>
 
           <div style={{ marginBottom: '20px' }}>
@@ -220,13 +244,23 @@ export default function SettingsView({ activeProject, onProjectChange }) {
             <input 
               type="password" 
               className="input-field" 
-              placeholder={keyHints.serp ? `Opgeslagen (${keyHints.serp}) — laat leeg om te behouden` : "Sleutel voor live SERP scans..."} 
+              placeholder={keyHints.serp ? `Opgeslagen (${keyHints.serp})` : "Sleutel voor live SERP scans..."} 
               value={serpKey}
               onChange={(e) => setSerpKey(e.target.value)}
             />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              Vereist voor het geautomatiseerd ophalen van échte live `google.nl` rank data.
+              Vereist voor het geautomatiseerd ophalen van échte live `google.nl` rank data. Niet nodig als je Search Console gebruikt.
             </span>
+            {keyHints.serp && (
+              <button
+                type="button"
+                onClick={() => handleClearSecret('serp_api_key', 'SERP API key')}
+                style={{ background: 'none', border: 'none', padding: 0, marginLeft: '8px', color: 'var(--danger)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Verwijderen
+              </button>
+            )}
+
           </div>
 
           <div style={{ marginBottom: '20px' }}>
