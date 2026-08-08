@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  LogOut,
+  Menu,
+  X,
+  LayoutDashboard,
   Globe, 
   Search, 
   Zap, 
@@ -40,8 +43,13 @@ import ContentOptimizerView from './components/ContentOptimizerView';
 import Ga4ClarityView from './components/Ga4ClarityView';
 import PillarClusterView from './components/PillarClusterView';
 import GoogleAdsStudio from './components/GoogleAdsStudio';
+import LoginView from './components/LoginView';
 
 export default function App() {
+  // 'loading' -> we weten nog niet of er een sessie is, 'out' -> inlogscherm.
+  const [authStatus, setAuthStatus] = useState('loading');
+  const [currentUser, setCurrentUser] = useState(null);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [activeProject, setActiveProject] = useState(null);
   const [allProjects, setAllProjects] = useState([]);
@@ -52,6 +60,23 @@ export default function App() {
     analysis: true,
     tools: true
   });
+
+  // Off-canvas navigatie op mobiel. Op desktop staat de sidebar altijd open en
+  // doet deze state niets.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKeyDown = (e) => { if (e.key === 'Escape') setMobileNavOpen(false); };
+    window.addEventListener('keydown', onKeyDown);
+    // Voorkom dat de pagina achter het menu meescrollt.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNavOpen]);
 
   const toggleGroup = (group) => {
     setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
@@ -98,9 +123,43 @@ export default function App() {
 
   const [presetOptimizerData, setPresetOptimizerData] = useState(null);
 
-  useEffect(() => {
-    fetchDashboardData(activeProject?.id);
+  // De ref overleeft StrictMode's dubbele effect-aanroep in dev. Zonder deze
+  // guard kunnen twee aanroepen allebei een lege projectenlijst zien en ieder
+  // een FrisseStart-project aanmaken.
+  const bootstrappedRef = useRef(false);
 
+  // Sessiecheck. Draait vóór alle andere data-calls, want fetchDashboardData
+  // maakt automatisch een project aan als er nog geen is — dat mag niet
+  // ongeauthenticeerd gebeuren.
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        setCurrentUser(data.user);
+        setAuthStatus(data.user ? 'in' : 'out');
+      })
+      .catch(() => setAuthStatus('out'));
+  }, []);
+
+  // Verlopen of ingetrokken sessie: main.jsx vuurt dit af bij een 401 met
+  // X-Auth-Required, ongeacht welke component de call deed.
+  useEffect(() => {
+    const handleExpired = () => {
+      setCurrentUser(null);
+      setAuthStatus('out');
+      bootstrappedRef.current = false;
+    };
+    window.addEventListener('auth-expired', handleExpired);
+    return () => window.removeEventListener('auth-expired', handleExpired);
+  }, []);
+
+  useEffect(() => {
+    if (authStatus !== 'in' || bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    fetchDashboardData(activeProject?.id);
+  }, [authStatus]);
+
+  useEffect(() => {
     const handleOpenOptimizer = (e) => {
       if (e.detail) {
         setPresetOptimizerData(e.detail);
@@ -112,6 +171,21 @@ export default function App() {
     return () => window.removeEventListener('open-content-optimizer', handleOpenOptimizer);
   }, []);
 
+  const handleAuthenticated = (user) => {
+    setCurrentUser(user);
+    setAuthStatus('in');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Uitloggen mislukt:', err);
+    }
+    // Volledige herlaad zodat geen enkele view nog data van de vorige sessie toont.
+    window.location.reload();
+  };
+
   const handleSwitchProject = (e) => {
     const projId = parseInt(e.target.value, 10);
     const found = allProjects.find(p => p.id === projId);
@@ -121,10 +195,24 @@ export default function App() {
     }
   };
 
+  if (authStatus === 'loading') {
+    return <div className="auth-page" />;
+  }
+
+  if (authStatus === 'out') {
+    return <LoginView onAuthenticated={handleAuthenticated} />;
+  }
+
   return (
     <div className="app-container">
+      {/* Sluit de off-canvas navigatie door naast het menu te tikken */}
+      <div
+        className={`sidebar-overlay ${mobileNavOpen ? 'open' : ''}`}
+        onClick={() => setMobileNavOpen(false)}
+      />
+
       {/* Sidebar Navigation */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileNavOpen ? 'open' : ''}`}>
         <div className="brand">
           <div className="brand-icon">
             <SearchCheck size={22} />
@@ -134,9 +222,21 @@ export default function App() {
             <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>GEO & Multi-Domain Tool</div>
           </div>
           <span className="brand-badge">PRO</span>
+          <button
+            className="mobile-nav-close"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Menu sluiten"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <ul className="nav-list">
+        {/* Eén handler op de lijst: een tik op een menu-item sluit het menu,
+            maar het open-/dichtklappen van een groep niet. */}
+        <ul
+          className="nav-list"
+          onClick={(e) => { if (e.target.closest('.nav-item')) setMobileNavOpen(false); }}
+        >
           {/* Main Links */}
           <li className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
             <LayoutDashboard className="nav-item-icon" /> Overzicht
@@ -221,7 +321,15 @@ export default function App() {
       {/* Main Content Area */}
       <main className="main-content">
         <header className="top-bar">
-          <div>
+          <div className="top-bar-heading">
+            <button
+              className="mobile-nav-toggle"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Menu openen"
+            >
+              <Menu size={20} />
+            </button>
+            <div style={{ minWidth: 0 }}>
             <h1 className="page-title">
               {activeTab === 'dashboard' && 'Dashboard Overzicht'}
               {activeTab === 'googleads' && 'Google Ads Campaign Studio & Directe Export'}
@@ -243,24 +351,27 @@ export default function App() {
             <p className="page-subtitle">
               Multi-Domein & Regionale SEO Tool geoptimaliseerd voor de Nederlandse Markt
             </p>
+            </div>
           </div>
 
-          {/* Quick Multi-Domain Switcher */}
-          {allProjects.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
+          <div className="top-bar-actions">
+            {/* Quick Multi-Domain Switcher */}
+            {allProjects.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: 'var(--radius-md)', minWidth: 0 }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Domein:</span>
-                <select 
-                  value={activeProject?.id || (allProjects[0]?.id)} 
+                <select
+                  value={activeProject?.id || (allProjects[0]?.id)}
                   onChange={handleSwitchProject}
-                  style={{ 
-                    background: 'transparent', 
-                    color: 'var(--primary)', 
-                    border: 'none', 
-                    fontWeight: 700, 
-                    fontSize: '0.9rem', 
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--primary)',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
                     outline: 'none',
-                    cursor: 'pointer' 
+                    cursor: 'pointer',
+                    maxWidth: '100%',
+                    textOverflow: 'ellipsis'
                   }}
                 >
                   {allProjects.map(p => (
@@ -270,8 +381,27 @@ export default function App() {
                   ))}
                 </select>
               </div>
+            )}
+
+            {/* Ingelogde gebruiker + uitloggen */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: 'var(--radius-md)', minWidth: 0 }}>
+              <span
+                className="top-bar-username"
+                style={{ fontSize: '0.85rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={currentUser?.email}
+              >
+                {currentUser?.name || currentUser?.email}
+              </span>
+              <button
+                className="btn btn-secondary"
+                onClick={handleLogout}
+                style={{ padding: '4px 10px', boxShadow: 'none' }}
+                title="Uitloggen"
+              >
+                <LogOut size={14} /> Uitloggen
+              </button>
             </div>
-          )}
+          </div>
         </header>
 
         {/* View Switcher */}
@@ -356,12 +486,13 @@ export default function App() {
         )}
 
         {activeTab === 'settings' && (
-          <SettingsView 
-            activeProject={activeProject} 
+          <SettingsView
+            activeProject={activeProject}
+            currentUser={currentUser}
             onProjectChange={(proj) => {
               setActiveProject(proj);
               fetchDashboardData(proj.id);
-            }} 
+            }}
           />
         )}
       </main>

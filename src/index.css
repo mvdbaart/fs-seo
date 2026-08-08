@@ -224,6 +224,47 @@ h1, h2, h3, h4, h5, h6 {
   flex-wrap: wrap;
 }
 
+.top-bar-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Hamburger en sluitknop bestaan alleen onder de breakpoint. */
+.mobile-nav-toggle,
+.mobile-nav-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.mobile-nav-close {
+  width: 30px;
+  height: 30px;
+  margin-left: 4px;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
 .page-title {
   font-size: clamp(1.2rem, 1.8vw, 1.5rem);
   color: #1a1a18;
@@ -616,4 +657,302 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Login / Enrollment */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg-main);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: 32px 28px;
+}
+
+/* .input-field is `flex: 1` with no width, so it collapses outside a flex row. */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.auth-code-input {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  padding: 14px 16px;
+}
+
+.alert {
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  border: 1px solid transparent;
+}
+
+.alert-error {
+  background: var(--danger-light);
+  border-color: var(--danger);
+  color: #912018;
+}
+
+.alert-info {
+  background: var(--primary-light);
+  border-color: var(--primary-border);
+  color: var(--primary-hover);
+}
+
+.auth-secret {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  word-break: break-all;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.auth-link-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.recovery-grid span {
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  text-align: center;
+}
+
+/* ============================================================
+   Responsive
+   Onder 900px wordt de vaste sidebar een off-canvas menu; onder
+   640px vervallen de resterende desktop-afmetingen.
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .mobile-nav-toggle,
+  .mobile-nav-close {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    width: 264px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 49;
+  }
+
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+    padding: 14px 16px;
+  }
+
+  /* Ruimere raakvlakken in het menu zelf. */
+  .nav-item {
+    padding: 10px 12px;
+    font-size: 0.875rem;
+  }
+
+  .nav-group-header {
+    padding: 10px 8px;
+  }
+
+  /* ---- Overloopbeveiliging -------------------------------------------
+     Deze app zet layout met inline `style={{...}}` objecten (zie CLAUDE.md),
+     verspreid over ~30 grids en ~25 flexrijen. Een stylesheet kan die alleen
+     via attribuutselectors overrulen. Dat is bewust: alles hieronder staat
+     binnen media queries, dus vanaf 901px verandert er niets aan de bestaande
+     desktoplayout.
+
+     De kern: grid- en flex-items hebben standaard `min-width: auto`, dus ze
+     weigeren smaller te worden dan hun inhoud. Eén brede tabel of een lange
+     URL rekt daardoor de hele kolom — en dus het scherm — op. `min-width: 0`
+     haalt die bodem weg; de inhoud wraps dan of scrollt binnen zijn eigen
+     container. Kolomindelingen blijven hier intact, die klappen pas onder
+     640px in. */
+
+  .main-content [style*="grid-template-columns"] > *,
+  .main-content [style*="display: flex"] > * {
+    min-width: 0;
+  }
+
+  /* Toolbars en knoppenrijen breken af in plaats van over te lopen.
+     .input-group, .card-title en .stat-header krijgen hun display:flex uit dit
+     stylesheet in plaats van uit een inline style, dus de attribuutselector
+     hierboven raakt ze niet — vandaar dat ze los genoemd staan. */
+  .main-content [style*="display: flex"],
+  .input-group,
+  .card-title,
+  .stat-header {
+    flex-wrap: wrap;
+  }
+
+  .input-group > *,
+  .stat-header > * {
+    min-width: 0;
+  }
+
+  /* Items in een kolom-flexcontainer krijgen de breedte van de breedste buur
+     op die regel, en die wordt op max-content berekend. Eén breed item rekt zo
+     het hele scherm op, en omdat de container daarna té breed blijft krijgen
+     de flexrijen erbinnen nooit de kans om af te breken. */
+  .main-content [style*="flex-direction: column"] > *,
+  .main-content .card,
+  .main-content .rec-card,
+  .main-content .table-container {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Kale URL's hebben geen natuurlijke afbreekpunten. */
+  .rec-card,
+  .rec-title,
+  .rec-desc,
+  .rec-action {
+    overflow-wrap: anywhere;
+  }
+
+  .main-content p {
+    overflow-wrap: break-word;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: var(--radius-md);
+  }
+
+  .card-title {
+    font-size: 1rem;
+  }
+
+  /* De ondertitel herhaalt wat de paginatitel al zegt; op een telefoon kost
+     dat twee regels die beter naar de inhoud gaan. */
+  .page-subtitle {
+    display: none;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .top-bar-actions {
+    width: 100%;
+  }
+
+  .top-bar-username {
+    max-width: 130px;
+  }
+
+  /* Formulierrijen stapelen. .input-field is `flex: 1` zonder breedte, dus in
+     een kolom heeft het een expliciete width nodig. */
+  .input-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .input-group > * {
+    width: 100%;
+  }
+
+  .table-container {
+    max-height: 65vh;
+  }
+
+  .modal-drawer {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px 16px;
+  }
+
+  .btn {
+    padding: 9px 14px;
+    min-height: 38px;
+  }
+
+  .tab-btn {
+    padding: 8px 11px;
+    font-size: 0.8rem;
+    min-height: 38px;
+  }
+
+  .filter-tabs {
+    gap: 6px;
+  }
+
+  .auth-card {
+    padding: 24px 20px;
+  }
+
+  /* Onder 640px is er geen ruimte meer voor kolommen naast elkaar: elke inline
+     kolomindeling wordt één kolom. minmax(0, …) in plaats van kaal `1fr` om
+     dezelfde reden als hierboven. Zet je later een nieuwe kolomindeling inline,
+     dan klapt die hier vanzelf mee in. */
+  .main-content [style*="grid-template-columns"]:not(.stats-grid) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Statistiekenstroken blijven twee kolommen — die passen wel. */
+  .main-content .stats-grid[style*="grid-template-columns"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }

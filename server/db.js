@@ -120,6 +120,57 @@ function initDb() {
       value TEXT
     );
 
+    -- Authentication. Timestamps in these four tables are epoch milliseconds
+    -- (INTEGER), deliberately unlike the DATETIME columns elsewhere: SQLite's
+    -- CURRENT_TIMESTAMP has no timezone suffix and Date.parse() reads it as
+    -- local time, which silently breaks the throttle and expiry comparisons.
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      role TEXT NOT NULL DEFAULT 'member',
+      totp_secret TEXT,
+      totp_confirmed_at INTEGER,
+      last_totp_step INTEGER,
+      enroll_token TEXT,
+      enroll_expires_at INTEGER,
+      disabled INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      user_agent TEXT,
+      ip TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS recovery_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      code_hash TEXT NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT,
+      ip TEXT,
+      success INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_enroll_token ON users(enroll_token);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_recovery_user ON recovery_codes(user_id);
+    CREATE INDEX IF NOT EXISTS idx_attempts_email ON login_attempts(email, created_at);
+    CREATE INDEX IF NOT EXISTS idx_attempts_ip ON login_attempts(ip, created_at);
+
     CREATE TABLE IF NOT EXISTS single_page_audits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       project_id INTEGER,
