@@ -32,6 +32,30 @@ Two-process app: an Express + SQLite backend (`server/`) and a Vite React SPA (`
 
 `better-sqlite3` is synchronous. Multi-row writes and cascading deletes use `db.transaction(...)` (see the project-delete route and the crawl insert loop).
 
+### Authentication
+
+Every `/api` route except `/api/auth/*` requires a session. `server/auth/` holds the whole layer: `totp.js` (otplib wrapper), `service.js` (users/sessions/enrollment/recovery/throttle), `cookies.js` (hand-rolled parse + `Set-Cookie`), `middleware.js` (`requireAuth`/`requireAdmin`), `routes.js` (an `express.Router`), and `invite.js` (CLI).
+
+**Middleware order in `server/index.js` is load-bearing.** Express matches in declaration order, so `app.use('/api/auth', authRouter)` and then `app.use('/api', requireAuth)` must stay directly under `express.json()`, above the ~60 inline routes. Mounting the public router on its own prefix is what avoids a skip-list — do not add one. `app.use(cors())` was removed deliberately: it sent `Access-Control-Allow-Origin: *`, which let any site read `GET /api/settings` and its API keys. Set `FS_SEO_CORS_ORIGINS` (explicit comma-separated list) only if a genuine cross-origin client appears.
+
+Login is passwordless: e-mail + a 6-digit TOTP code, no password column. Accounts are created by an admin (Instellingen → Gebruikers) or from the CLI:
+
+```bash
+node server/auth/invite.js jan@frissestart.nl "Jan" admin
+```
+
+That prints a `/?enroll=<token>` link, valid 48 hours. **The first admin can only be created this way** — there is no bootstrap route, because "allowed while the users table is empty" is a land-grab race on a public domain. Re-running it on an existing address is also the "TOTP resetten" path: it wipes the secret, sessions and recovery codes.
+
+otplib v13 gotchas (it is a rewrite of v12, most tutorials online are wrong): there is no `authenticator` export; `verify`/`verifySync` return `{valid, timeStep, ...}`, never a boolean, so `if (verify(...))` is always truthy; the tolerance option is `epochTolerance` **in seconds**, not `window` in steps; replay protection is built in via `afterTimeStep` (persisted as `users.last_totp_step`); and `verify` *throws* — rather than returning `{valid:false}` — when the stored step is ahead of now (clock rollback, restored `.db`), which is why `verifyTotp` wraps it in `try/catch`.
+
+Auth tables (`users`, `sessions`, `recovery_codes`, `login_attempts`) store timestamps as **epoch-ms `INTEGER`**, unlike the `DATETIME DEFAULT CURRENT_TIMESTAMP` used elsewhere — SQLite's format has no timezone suffix and `Date.parse` reads it as local time, which silently breaks the throttle and expiry maths.
+
+On the frontend, `src/App.jsx` gates the whole shell on `GET /api/auth/me` and only then runs the dashboard bootstrap (behind a `useRef`, because that path auto-creates a project and StrictMode double-fires). `src/main.jsx` installs a `window.fetch` **and** an axios interceptor — both are needed, since `AiPromptCanvas.jsx` uses axios/XHR, which a fetch wrapper cannot see. They key on the `X-Auth-Required` response header, not on the 401 status, so a wrong code on the login form doesn't get mistaken for an expired session. Individual components need no changes: the session cookie is httpOnly and same-origin, so it rides along automatically.
+
+In production Express serves `dist/` with a SPA catch-all (only when `NODE_ENV=production`), so the UI and API share one origin — which is what the cookie needs. Serve `dist/` only; the repo root holds `seo_database.db`, `.env.local` and a Google service-account key.
+
+Optional env vars: `FS_SEO_TOTP_ISSUER` (name shown in the authenticator app), `FS_SEO_BASE_URL` (used by the CLI to print the enroll link), `FS_SEO_CORS_ORIGINS`.
+
 ### Data model
 
 Everything is scoped by `project_id` (a project = one domain). `projects` → `keywords` → `keyword_rankings`, `crawl_sessions` → `crawled_pages`, plus `geo_rankings`, `pagespeed_audits`, `competitors`, and a key/value `settings` table. Foreign keys are declared but SQLite enforcement is not enabled — deletes are done manually and explicitly (`DELETE /api/projects/:id` deletes each child table in a transaction).
@@ -67,6 +91,20 @@ Mostly removed; what remains: `geoAnalyzer.js` has a fixed `REGIONS` array (Geld
 `src/App.jsx` is the whole shell: a `activeTab` string switches between the nine views in `src/components/`, and it owns `activeProject` / `allProjects` / `dashboardData`. There is no router, no state library, and no shared API client — each view does its own `fetch` in a `useEffect` and keeps local `useState`. `projectId` is passed down as a prop and views defensively fall back to `projectId || 1`.
 
 Styling is a single global `src/index.css`: design tokens as CSS custom properties under `:root` (green `--primary: #059669` FrisseStart palette) plus semantic classes (`.card`, `.card-title`, `.btn btn-primary|secondary|danger`, `.badge badge-success|danger|warning|info`, `.input-field`, `.rec-card type-*`). Components combine those classes with inline `style` objects that reference the same `var(--token)` names. No CSS modules, no Tailwind, no component library — match this pattern rather than introducing one.
+
+### Responsive
+
+Two breakpoints at the bottom of `src/index.css`, and **nothing above 900px is affected** — desktop rendering is byte-for-byte what it was.
+
+- **≤900px** — the fixed 220px sidebar becomes an off-canvas drawer (`.sidebar.open`, `.sidebar-overlay.open`), toggled by `mobileNavOpen` in `App.jsx`. Escape and a tap on the overlay close it; the handler on `<ul className="nav-list">` closes it when a `.nav-item` is clicked but *not* when a group header is expanded. Body scroll is locked while open. This block also carries the **overflow guards**.
+- **≤640px** — collapses every inline column layout to one column and stacks `.input-group` forms.
+
+Because layout lives in inline `style` objects, the guards are written as attribute selectors (`[style*="display: flex"]`, `[style*="grid-template-columns"]`). That is deliberate and scoped entirely inside the media queries. The load-bearing part is `min-width: 0` / `max-width: 100%`: grid and flex items default to `min-width: auto`, so they refuse to shrink below their content, and a single wide table or a bare URL stretches its column — and therefore the page. Note that `.input-group`, `.card-title` and `.stat-header` get `display: flex` from the stylesheet rather than an inline style, so the attribute selectors miss them and they are listed by name.
+
+Set a new inline `gridTemplateColumns` anywhere and it collapses on mobile automatically; no per-component work needed. Two caveats worth knowing:
+
+- `.app-container` has `overflow-x: hidden`, which **hides** horizontal overflow rather than fixing it. Delete it temporarily when checking a new view, otherwise `scrollWidth` will always look clean.
+- Charts inside a horizontally scrolling `.table-container` (the expandable row in `RankTrackerView.jsx`) size to the *scroll* width, not the viewport — hence the `position: sticky` + `calc(100vw - …)` cap there.
 
 Icons come from `lucide-react`, charts from `recharts`, and PDF export is client-side `jspdf` (`ReportsView.jsx`, which also does a manual data-URI CSV download).
 

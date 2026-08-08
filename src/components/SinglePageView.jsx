@@ -177,7 +177,7 @@ export default function SinglePageView({ projectId, projectDomain }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div>
                   <h3 style={{ fontSize: '1.15rem' }}>Geanalyseerde URL</h3>
-                  <a href={result.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.9rem' }}>
+                  <a href={result.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.9rem', wordBreak: 'break-all' }}>
                     {result.url} <ExternalLink size={14} />
                   </a>
                 </div>

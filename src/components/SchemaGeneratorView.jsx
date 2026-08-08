@@ -493,7 +493,10 @@ export default function SchemaGeneratorView({ projectId }) {
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table className="audit-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            {/* minWidth in plaats van width:100% — anders krimpt de tabel mee met
+                de container en scrollt de wrapper nooit, waardoor vijf kolommen
+                op een telefoon in elkaar geperst worden. */}
+            <table className="audit-table" style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
                   <th>URL / Titel</th>

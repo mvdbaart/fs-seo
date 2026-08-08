@@ -550,9 +550,12 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                         <span style={{ color: 'var(--text-dim)' }}>Geen URL gevonden</span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                      <button 
-                        className="btn btn-secondary btn-xs" 
+                    {/* display:flex hoort op een wrapper, niet op de <td> zelf —
+                        anders doet de cel niet meer mee aan de kolombreedtes. */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                      <button
+                        className="btn btn-secondary btn-xs"
                         title="Optimaliseer met AI Content Generator"
                         onClick={() => {
                           const kwUrl = kw.url_found || kw.target_url || (activeProject ? activeProject.domain : '');
@@ -564,6 +567,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                       <button className="btn btn-danger btn-xs" onClick={() => handleDeleteKeyword(kw.id)}>
                         <Trash2 size={12} />
                       </button>
+                      </div>
                     </td>
                   </tr>
                   {expandedId === kw.id && (
@@ -576,7 +580,10 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                               : 'Nog onvoldoende meetpunten voor een grafiek. Elke ranking check voegt een punt toe.'}
                           </div>
                         ) : (
-                          <div style={{ height: '180px', width: '100%' }}>
+                          /* De cel is zo breed als de hele (horizontaal scrollende)
+                             tabel, dus width:100% zou de grafiek buiten beeld
+                             tekenen. Sticky + viewportcap houdt hem zichtbaar. */
+                          <div style={{ height: '180px', width: '100%', maxWidth: 'calc(100vw - 100px)', position: 'sticky', left: 0 }}>
                             <ResponsiveContainer width="100%" height="100%">
                               <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />

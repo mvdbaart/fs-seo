@@ -28,12 +28,38 @@ const {
   fetchCourseCategoriesFromSupabase 
 } = require('./services/supabaseService');
 const { generateAiContent } = require('./services/aiGenerator');
+const authRouter = require('./auth/routes');
+const { requireAuth } = require('./auth/middleware');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
 app.use(express.json());
+
+// Needed behind a reverse proxy, otherwise req.ip is the proxy for everyone and
+// the per-IP login throttle would treat the whole team as one client.
+app.set('trust proxy', 1);
+
+// CORS is off by default. Previously `app.use(cors())` sent
+// Access-Control-Allow-Origin: * , which let any website on the internet read
+// GET /api/settings — including the Serper, PageSpeed and GitHub keys. In both
+// dev and production the browser only ever talks to its own origin (the Vite
+// proxy is a server-to-server hop the browser never sees), so nothing needs it.
+if (process.env.FS_SEO_CORS_ORIGINS) {
+  const allowed = process.env.FS_SEO_CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors({ origin: allowed, credentials: true })); // explicit list, never `true`
+}
+
+// ----------------------------------------------------
+// Authentication
+//
+// Order is load-bearing: Express matches in declaration order, so the gate must
+// sit above the ~60 routes below. Mounting the public auth router on its own
+// prefix first avoids needing a skip-list (a skip-list is how you ship a hole:
+// a typo, a trailing slash, or a new public route nobody remembers to add).
+// ----------------------------------------------------
+app.use('/api/auth', authRouter);
+app.use('/api', requireAuth);
 
 // ----------------------------------------------------
 // Google Indexing API Endpoints
@@ -970,17 +996,42 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
+// Alleen deze keys mogen via de API geschreven worden. Zonder whitelist kan een
+// client willekeurige rijen in de settings-tabel zetten of overschrijven.
+const ALLOWED_SETTING_KEYS = new Set([
+  'pagespeed_api_key',
+  'serp_api_key',
+  'business_name',
+  'business_address',
+  'business_phone',
+  'ga4_property_id',
+  'clarity_project_id',
+  'github_token',
+  'github_repo',
+  'remote_fs_next_url',
+  'auto_check_enabled',
+  'auto_check_frequency',
+  'report_email_recipients',
+  'gsc_service_account_json'
+]);
+
 app.post('/api/settings', (req, res) => {
   try {
     const settingsObj = req.body;
+    const unknown = Object.keys(settingsObj).filter(k => !ALLOWED_SETTING_KEYS.has(k));
+    if (unknown.length > 0) {
+      // Weigeren in plaats van negeren, zodat een typefout in de UI zichtbaar is.
+      return res.status(400).json({ error: `Onbekende instelling(en): ${unknown.join(', ')}` });
+    }
+
     const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-    
+
     const transaction = db.transaction((obj) => {
       for (const [key, value] of Object.entries(obj)) {
         stmt.run(key, String(value));
       }
     });
-    
+
     transaction(settingsObj);
     res.json({ success: true });
   } catch (err) {
@@ -1196,6 +1247,28 @@ app.get('/api/google-ads/export-csv/:id', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ----------------------------------------------------
+// Static SPA (production only)
+//
+// Serving the built frontend from Express puts the UI and the API on one
+// origin, which is what the session cookie needs. Must come after every /api
+// route so the catch-all cannot swallow them. requireAuth is mounted at /api,
+// so it never applies here — the login page itself stays reachable.
+// ----------------------------------------------------
+if (process.env.NODE_ENV === 'production') {
+  const distDir = path.join(__dirname, '../dist');
+
+  // Only dist/. The repo root holds seo_database.db, .env.local and a Google
+  // service-account private key.
+  app.use(express.static(distDir, { index: false, maxAge: '1h' }));
+
+  // app.get('*') is the Express 4 form; Express 5 would need '/*splat'.
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next(); // let real API 404s be 404s
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`SEO Tool Backend Server active on http://localhost:${PORT}`);

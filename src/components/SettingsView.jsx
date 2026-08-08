@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, Globe, Database, Save, Check, Trash2 } from 'lucide-react';
+import { Settings, Key, Globe, Database, Save, Check, Trash2, Users, UserPlus, RefreshCw, Copy, Ban, CheckCircle2 } from 'lucide-react';
 
-export default function SettingsView({ activeProject, onProjectChange }) {
+export default function SettingsView({ activeProject, currentUser, onProjectChange }) {
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Gebruikersbeheer
+  const [users, setUsers] = useState([]);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState('member');
+  const [inviteLink, setInviteLink] = useState('');
+  const [inviteFor, setInviteFor] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+
   const [pagespeedKey, setPagespeedKey] = useState('');
   const [serpKey, setSerpKey] = useState('');
   const [gscJson, setGscJson] = useState('');
@@ -30,6 +41,110 @@ export default function SettingsView({ activeProject, onProjectChange }) {
     fetchSettings();
     fetchProjects();
   }, []);
+
+  useEffect(() => {
+    if (isAdmin) fetchUsers();
+  }, [isAdmin]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/auth/users');
+      if (!res.ok) return;
+      setUsers(await res.json());
+    } catch (err) {
+      console.error('Fout bij ophalen gebruikers:', err);
+    }
+  };
+
+  // De enroll-link wordt hier opgebouwd zodat de server geen basis-URL hoeft te kennen.
+  const showInvite = (email, token) => {
+    setInviteFor(email);
+    setInviteLink(`${window.location.origin}/?enroll=${token}`);
+    setLinkCopied(false);
+  };
+
+  const handleInviteUser = async (e) => {
+    e.preventDefault();
+    if (!newUserEmail) return;
+    try {
+      const res = await fetch('/api/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newUserEmail, name: newUserName, role: newUserRole })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('Uitnodigen mislukt: ' + data.error);
+        return;
+      }
+      showInvite(data.user.email, data.token);
+      setNewUserEmail('');
+      setNewUserName('');
+      setNewUserRole('member');
+      fetchUsers();
+    } catch (err) {
+      alert('Uitnodigen mislukt: ' + err.message);
+    }
+  };
+
+  const handleResetTotp = async (user) => {
+    if (!confirm(`Authenticator van ${user.email} resetten? De huidige app en herstelcodes werken daarna niet meer.`)) return;
+    try {
+      const res = await fetch(`/api/auth/users/${user.id}/reset-totp`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('Resetten mislukt: ' + data.error);
+        return;
+      }
+      showInvite(user.email, data.token);
+      fetchUsers();
+    } catch (err) {
+      alert('Resetten mislukt: ' + err.message);
+    }
+  };
+
+  const handleToggleDisabled = async (user) => {
+    try {
+      const res = await fetch(`/api/auth/users/${user.id}/disabled`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ disabled: !user.disabled })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error);
+        return;
+      }
+      fetchUsers();
+    } catch (err) {
+      alert('Wijzigen mislukt: ' + err.message);
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!confirm(`Account ${user.email} definitief verwijderen?`)) return;
+    try {
+      const res = await fetch(`/api/auth/users/${user.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error);
+        return;
+      }
+      fetchUsers();
+    } catch (err) {
+      alert('Verwijderen mislukt: ' + err.message);
+    }
+  };
+
+  const handleCopyInvite = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (err) {
+      /* clipboard geweigerd — de link staat al zichtbaar in beeld */
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -181,6 +296,112 @@ export default function SettingsView({ activeProject, onProjectChange }) {
 
   return (
     <div>
+      {/* Gebruikersbeheer (alleen beheerders) */}
+      {isAdmin && (
+        <div className="card">
+          <h2 className="card-title">
+            <Users size={20} color="var(--primary)" /> Gebruikers
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '20px' }}>
+            Nodig collega's uit. Ze stellen zelf een authenticator-app in via de aanmeldlink — geef die
+            link persoonlijk door, hij is 48 uur geldig.
+          </p>
+
+          {inviteLink && (
+            <div className="alert alert-info" style={{ marginBottom: '20px' }}>
+              <div style={{ fontWeight: 600, marginBottom: '8px' }}>Aanmeldlink voor {inviteFor}</div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input className="input-field" readOnly value={inviteLink} style={{ minWidth: '260px', fontSize: '0.8rem' }} />
+                <button className="btn btn-secondary" onClick={handleCopyInvite}>
+                  {linkCopied ? <Check size={15} /> : <Copy size={15} />} {linkCopied ? 'Gekopieerd' : 'Kopieer'}
+                </button>
+                <button className="btn btn-secondary" onClick={() => setInviteLink('')}>Sluiten</button>
+              </div>
+            </div>
+          )}
+
+          <div className="table-container" style={{ marginBottom: '24px' }}>
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>E-mail</th>
+                  <th>Naam</th>
+                  <th>Rol</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Acties</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td>{u.email}</td>
+                    <td>{u.name || '—'}</td>
+                    <td>
+                      <span className={`badge ${u.role === 'admin' ? 'badge-info' : 'badge-success'}`}>
+                        {u.role === 'admin' ? 'Beheerder' : 'Gebruiker'}
+                      </span>
+                    </td>
+                    <td>
+                      {u.disabled ? (
+                        <span className="badge badge-danger">Geblokkeerd</span>
+                      ) : u.enrolled ? (
+                        <span className="badge badge-success">Actief</span>
+                      ) : (
+                        <span className="badge badge-warning">Nog niet aangemeld</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-secondary" onClick={() => handleResetTotp(u)} title="Nieuwe aanmeldlink; oude authenticator vervalt">
+                        <RefreshCw size={14} /> Reset
+                      </button>{' '}
+                      <button className="btn btn-secondary" onClick={() => handleToggleDisabled(u)}>
+                        {u.disabled ? <CheckCircle2 size={14} /> : <Ban size={14} />} {u.disabled ? 'Activeer' : 'Blokkeer'}
+                      </button>{' '}
+                      <button className="btn btn-danger" onClick={() => handleDeleteUser(u)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr><td colSpan={5} style={{ color: 'var(--text-dim)' }}>Nog geen gebruikers.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <form onSubmit={handleInviteUser} className="input-group" style={{ flexWrap: 'wrap' }}>
+            <input
+              type="email"
+              className="input-field"
+              placeholder="E-mailadres"
+              value={newUserEmail}
+              onChange={(e) => setNewUserEmail(e.target.value)}
+              required
+            />
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Naam (optioneel)"
+              value={newUserName}
+              onChange={(e) => setNewUserName(e.target.value)}
+            />
+            <select
+              className="input-field"
+              value={newUserRole}
+              onChange={(e) => setNewUserRole(e.target.value)}
+              style={{ flex: '0 0 auto' }}
+            >
+              <option value="member">Gebruiker</option>
+              <option value="admin">Beheerder</option>
+            </select>
+            <button className="btn btn-primary" type="submit" style={{ flex: '0 0 auto' }}>
+              <UserPlus size={16} /> Uitnodigen
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* API Key Configuration */}
       <div className="card">
         <h2 className="card-title">
@@ -501,9 +722,9 @@ export default function SettingsView({ activeProject, onProjectChange }) {
             <div 
               key={proj.id} 
               style={{ 
-                display: 'flex', 
-                justify: 'space-between', 
-                alignItems: 'center', 
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 padding: '12px 16px', 
                 background: activeProject?.id === proj.id ? 'var(--primary-light)' : 'rgba(0,0,0,0.2)',
                 borderRadius: 'var(--radius-md)',

@@ -274,7 +274,7 @@ export default function AiPromptCanvas({
               background: '#f3e8ff',
               borderBottom: showResult ? '1px solid #e9d5ff' : 'none',
               display: 'flex',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               cursor: 'pointer'
             }}
@@ -380,7 +380,7 @@ export default function AiPromptCanvas({
         borderTop: '1px dashed var(--border-color)',
         display: 'flex',
         alignItems: 'center',
-        justify: 'space-between',
+        justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '12px'
       }}>

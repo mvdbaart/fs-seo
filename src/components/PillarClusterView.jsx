@@ -225,7 +225,7 @@ export default function PillarClusterView({ projectId }) {
                 </div>
                 {currentCluster.pillarPage ? (
                   <div style={{ marginTop: '6px' }}>
-                    <a href={currentCluster.pillarPage.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <a href={currentCluster.pillarPage.url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '6px', wordBreak: 'break-all' }}>
                       {currentCluster.pillarPage.url} <ExternalLink size={14} />
                     </a>
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
