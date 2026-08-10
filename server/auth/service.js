@@ -139,7 +139,7 @@ async function startEnrollment(token) {
 
   let secret = user.totp_secret;
   if (!secret) {
-    secret = newSecret();
+    secret = await newSecret();
     db.prepare('UPDATE users SET totp_secret = ? WHERE id = ?').run(secret, user.id);
   }
 
@@ -147,11 +147,11 @@ async function startEnrollment(token) {
   return { email: user.email, name: user.name || '', ...payload };
 }
 
-function confirmEnrollment(token, code) {
+async function confirmEnrollment(token, code) {
   const user = getUserByEnrollToken(token);
   if (!user || !user.totp_secret) return null;
 
-  const step = verifyTotp({ secret: user.totp_secret, token: code });
+  const step = await verifyTotp({ secret: user.totp_secret, token: code });
   if (step === null) return null;
 
   const recoveryCodes = buildRecoveryCodes();
@@ -235,11 +235,11 @@ function consumeRecoveryCode(email, code) {
 // Login + sessions
 // ----------------------------------------------------
 
-function verifyLogin(email, code) {
+async function verifyLogin(email, code) {
   const user = getUserByEmail(email);
   if (!user || user.disabled || !user.totp_confirmed_at || !user.totp_secret) return null;
 
-  const step = verifyTotp({
+  const step = await verifyTotp({
     secret: user.totp_secret,
     token: code,
     afterTimeStep: Number.isInteger(user.last_totp_step) ? user.last_totp_step : undefined

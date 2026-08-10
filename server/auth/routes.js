@@ -20,7 +20,7 @@ router.get('/me', (req, res) => {
   res.json({ user: row ? auth.publicUser(row) : null });
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { email, code } = req.body || {};
     if (!email || !code) {
@@ -33,7 +33,7 @@ router.post('/login', (req, res) => {
       return res.status(429).json({ error: 'Te veel mislukte pogingen. Probeer het over 15 minuten opnieuw.' });
     }
 
-    const user = auth.verifyLogin(email, code);
+    const user = await auth.verifyLogin(email, code);
     if (!user) {
       auth.recordAttempt(email, req.ip, false);
       return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
@@ -73,7 +73,7 @@ router.get('/enroll/:token', async (req, res) => {
   }
 });
 
-router.post('/enroll/:token', (req, res) => {
+router.post('/enroll/:token', async (req, res) => {
   try {
     const { code } = req.body || {};
     if (!code) return res.status(400).json({ error: 'Code is verplicht' });
@@ -84,7 +84,7 @@ router.post('/enroll/:token', (req, res) => {
       return res.status(429).json({ error: 'Te veel mislukte pogingen. Probeer het over 15 minuten opnieuw.' });
     }
 
-    const result = auth.confirmEnrollment(req.params.token, code);
+    const result = await auth.confirmEnrollment(req.params.token, code);
     if (!result) {
       auth.recordAttempt(`enroll:${req.params.token}`, req.ip, false);
       return res.status(400).json({ error: 'De code klopt niet. Controleer of de tijd op je telefoon goed staat.' });
