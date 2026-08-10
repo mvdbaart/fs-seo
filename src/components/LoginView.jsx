@@ -33,6 +33,14 @@ function CopyButton({ value, label = 'Kopieer' }) {
   );
 }
 
+async function parseJsonResponse(res) {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return await res.json();
+  }
+  throw new Error(res.ok ? 'Ongeldig antwoord van server' : `Server status ${res.status} (${res.statusText || 'Geen JSON antwoord'})`);
+}
+
 export default function LoginView({ onAuthenticated }) {
   const enrollTokenFromUrl = new URLSearchParams(window.location.search).get('enroll');
 
@@ -59,7 +67,7 @@ export default function LoginView({ onAuthenticated }) {
     setBusy(true);
     fetch(`/api/auth/enroll/${enrollToken}`)
       .then(async res => {
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         if (cancelled) return;
         if (!res.ok) {
           setError(data.error || 'Deze uitnodigingslink is ongeldig of verlopen');
@@ -91,7 +99,7 @@ export default function LoginView({ onAuthenticated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (!res.ok) {
         setError(data.error || 'Inloggen mislukt');
         setCode('');
@@ -115,7 +123,7 @@ export default function LoginView({ onAuthenticated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (!res.ok) {
         setError(data.error || 'Aanmelden mislukt');
         setCode('');
@@ -141,7 +149,7 @@ export default function LoginView({ onAuthenticated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, recoveryCode })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (!res.ok) {
         setError(data.error || 'Herstellen mislukt');
         return;

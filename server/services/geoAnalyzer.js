@@ -1,5 +1,6 @@
 const db = require('../db');
 const axios = require('axios');
+const { getSerpApiKey } = require('./rankTracker');
 
 const REGIONS = ['Geldrop', 'Nuenen', 'Eindhoven', 'Helmond', 'Utrecht', 'Amsterdam', 'Rotterdam'];
 
@@ -11,8 +12,7 @@ async function runGeoRankCheck(projectId) {
   if (!project) return [];
 
   const keywords = db.prepare('SELECT * FROM keywords WHERE project_id = ?').all(projectId);
-  const serpApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'serp_api_key'").get();
-  const serpApiKey = process.env.FS_SERPER_API || process.env.SERP_API_KEY || process.env.SERPER_API_KEY || (serpApiKeyRow ? serpApiKeyRow.value : '');
+  const serpApiKey = getSerpApiKey();
 
   if (keywords.length === 0) {
     // Geen zoekwoorden = geen check; er wordt bewust niets verzonnen of geseed.
@@ -94,8 +94,7 @@ async function runGeoRankCheck(projectId) {
 }
 
 async function checkGoogleBusinessProfile(projectName, domain, region = 'Nuenen') {
-  const serpApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'serp_api_key'").get();
-  const serpApiKey = process.env.FS_SERPER_API || process.env.SERP_API_KEY || process.env.SERPER_API_KEY || (serpApiKeyRow ? serpApiKeyRow.value : '');
+  const serpApiKey = getSerpApiKey();
   if (!serpApiKey) return null;
 
   try {

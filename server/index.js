@@ -1248,6 +1248,11 @@ app.get('/api/google-ads/export-csv/:id', (req, res) => {
   }
 });
 
+// Catch-all for unmatched /api routes so they return clean JSON 404 errors instead of Express HTML
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: `API route niet gevonden: ${req.method} ${req.originalUrl}` });
+});
+
 // ----------------------------------------------------
 // Static SPA (production only)
 //
@@ -1270,6 +1275,10 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`SEO Tool Backend Server active on http://localhost:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`SEO Tool Backend Server active on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

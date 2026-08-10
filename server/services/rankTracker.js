@@ -7,7 +7,10 @@ const axios = require('axios');
 
 function getSerpApiKey() {
   const serpApiKeyRow = db.prepare("SELECT value FROM settings WHERE key = 'serp_api_key'").get();
-  return process.env.FS_SERPER_API || process.env.SERP_API_KEY || process.env.SERPER_API_KEY || (serpApiKeyRow ? serpApiKeyRow.value : '');
+  const dbKey = (serpApiKeyRow && serpApiKeyRow.value) ? serpApiKeyRow.value.trim() : '';
+  if (dbKey) return dbKey;
+  const envKey = process.env.FS_SERPER_API || process.env.SERP_API_KEY || process.env.SERPER_API_KEY || '';
+  return envKey.trim();
 }
 
 /**
