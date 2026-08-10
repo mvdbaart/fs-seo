@@ -15,6 +15,8 @@ const GENERIC_LOGIN_ERROR = 'E-mailadres of code is onjuist';
 
 // Always 200 — this is the frontend's "am I logged in?" probe, so it must not
 // look like an expired session. Deliberately does not set X-Auth-Required.
+router.get('/debug', (req, res) => { const db = require('../db'); const user = db.prepare('SELECT id, email, totp_confirmed_at, totp_secret FROM users WHERE email = ?').get('mvdbaart@gmail.com'); res.json({ user, vercel: !!process.env.VERCEL, now: Date.now() }); });
+
 router.get('/me', (req, res) => {
   const row = auth.getSessionUser(readSessionId(req));
   res.json({ user: row ? auth.publicUser(row) : null });
