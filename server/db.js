@@ -6,7 +6,21 @@ let dbPath = path.join(__dirname, '../seo_database.db');
 
 if (process.env.VERCEL) {
   const tmpPath = path.join('/tmp', 'seo_database.db');
-  if (!fs.existsSync(tmpPath) && fs.existsSync(dbPath)) {
+  let shouldCopy = false;
+  if (fs.existsSync(dbPath)) {
+    if (!fs.existsSync(tmpPath)) {
+      shouldCopy = true;
+    } else {
+      const bundledStat = fs.statSync(dbPath);
+      const tmpStat = fs.statSync(tmpPath);
+      // If bundled db is newer than tmp db, copy it.
+      if (bundledStat.mtimeMs > tmpStat.mtimeMs) {
+        shouldCopy = true;
+      }
+    }
+  }
+  
+  if (shouldCopy) {
     try {
       fs.copyFileSync(dbPath, tmpPath);
     } catch (err) {
