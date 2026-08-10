@@ -49,7 +49,7 @@ async function verifyTotp({ secret, token, afterTimeStep }) {
   const opts = {
     secret,
     token: code,
-    epochTolerance: [30, 30]
+    epochTolerance: [60, 60]
   };
   if (Number.isInteger(afterTimeStep) && afterTimeStep >= 0) {
     opts.afterTimeStep = afterTimeStep;

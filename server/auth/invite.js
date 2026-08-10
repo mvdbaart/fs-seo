@@ -23,21 +23,23 @@ if (!email) {
   process.exit(1);
 }
 
-try {
-  const existing = auth.getUserByEmail(email);
-  const { user, token, expiresAt } = auth.createOrResetInvite({ email, name, role });
+(async () => {
+  try {
+    const existing = auth.getUserByEmail(email);
+    const { user, token, expiresAt } = await auth.createOrResetInvite({ email, name, role });
 
-  const base = process.env.FS_SEO_BASE_URL || 'http://localhost:3005';
-  const hours = Math.round((expiresAt - Date.now()) / 3600000);
+    const base = process.env.FS_SEO_BASE_URL || 'http://localhost:3005';
+    const hours = Math.round((expiresAt - Date.now()) / 3600000);
 
-  console.log('');
-  console.log(existing ? `Account gereset: ${user.email} (${user.role})` : `Account aangemaakt: ${user.email} (${user.role})`);
-  if (existing) console.log('De oude authenticator en herstelcodes werken niet meer.');
-  console.log('');
-  console.log(`Aanmeldlink (${hours} uur geldig):`);
-  console.log(`${base}/?enroll=${token}`);
-  console.log('');
-} catch (err) {
-  console.error('Mislukt:', err.message);
-  process.exit(1);
-}
+    console.log('');
+    console.log(existing ? `Account gereset: ${user.email} (${user.role})` : `Account aangemaakt: ${user.email} (${user.role})`);
+    if (existing) console.log('De oude authenticator en herstelcodes werken niet meer.');
+    console.log('');
+    console.log(`Aanmeldlink (${hours} uur geldig):`);
+    console.log(`${base}/?enroll=${token}`);
+    console.log('');
+  } catch (err) {
+    console.error('Mislukt:', err.message);
+    process.exit(1);
+  }
+})();

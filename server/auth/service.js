@@ -64,7 +64,7 @@ function countUsers() {
  * The ON CONFLICT branch is also the "TOTP resetten" path: it wipes the old
  * secret so a lost authenticator cannot keep working.
  */
-function createOrResetInvite({ email, name = '', role = 'member' }) {
+async function createOrResetInvite({ email, name = '', role = 'member' }) {
   const normalized = normalizeEmail(email);
   if (!normalized || !normalized.includes('@')) {
     throw new Error('Ongeldig e-mailadres');
@@ -74,22 +74,23 @@ function createOrResetInvite({ email, name = '', role = 'member' }) {
   }
 
   const token = crypto.randomBytes(32).toString('hex');
+  const secret = await newSecret();
   const now = Date.now();
   const expires = now + ENROLL_MS;
 
   const run = db.transaction(() => {
     db.prepare(`
-      INSERT INTO users (email, name, role, enroll_token, enroll_expires_at, disabled, created_at)
-      VALUES (?, ?, ?, ?, ?, 0, ?)
+      INSERT INTO users (email, name, role, enroll_token, enroll_expires_at, totp_secret, disabled, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?)
       ON CONFLICT(email) DO UPDATE SET
         name = excluded.name,
         role = excluded.role,
         enroll_token = excluded.enroll_token,
         enroll_expires_at = excluded.enroll_expires_at,
-        totp_secret = NULL,
+        totp_secret = excluded.totp_secret,
         totp_confirmed_at = NULL,
         last_totp_step = NULL
-    `).run(normalized, name, role, token, expires, now);
+    `).run(normalized, name, role, token, expires, secret, now);
 
     const user = getUserByEmail(normalized);
     // A reset invalidates everything the old device could still do.

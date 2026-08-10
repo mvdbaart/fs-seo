@@ -140,22 +140,22 @@ router.get('/users', requireAuth, requireAdmin, (req, res) => {
   res.json(auth.listUsers());
 });
 
-router.post('/users', requireAuth, requireAdmin, (req, res) => {
+router.post('/users', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { email, name, role } = req.body || {};
-    const result = auth.createOrResetInvite({ email, name: name || '', role: role || 'member' });
+    const result = await auth.createOrResetInvite({ email, name: name || '', role: role || 'member' });
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-router.post('/users/:id/reset-totp', requireAuth, requireAdmin, (req, res) => {
+router.post('/users/:id/reset-totp', requireAuth, requireAdmin, async (req, res) => {
   try {
     const target = auth.getUserById(parseInt(req.params.id, 10));
     if (!target) return res.status(404).json({ error: 'Gebruiker niet gevonden' });
 
-    const result = auth.createOrResetInvite({
+    const result = await auth.createOrResetInvite({
       email: target.email,
       name: target.name || '',
       role: target.role
