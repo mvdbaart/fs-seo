@@ -328,6 +328,20 @@ function initDb() {
   } catch (e) {
     // Column already exists
   }
+
+  // Places: het place_id één keer opzoeken en bewaren. Een searchText-aanroep
+  // valt in de duurste Places-tier, dus die mag maar één keer per bedrijf.
+  try {
+    db.exec('ALTER TABLE competitors ADD COLUMN place_id TEXT');
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.exec('ALTER TABLE competitors ADD COLUMN place_match TEXT');
+  } catch (e) {
+    // Column already exists
+  }
 }
 
 initDb();

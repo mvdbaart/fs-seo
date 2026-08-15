@@ -298,6 +298,10 @@ app.get('/api/projects/:id/schema-audit', async (req, res) => {
 // Google Business Profile (My Business) API Endpoint
 // ----------------------------------------------------
 const { getGbpAnalysis } = require('./services/gbpService');
+const { getPerformanceSummary } = require('./services/gbpPerformanceService');
+const { getPlacesComparison } = require('./services/placesService');
+// buildWindows wordt hier al gebruikt, dus de require moet vóór deze routes staan.
+const { buildWindows } = require('./services/insightsEngine');
 
 app.get('/api/projects/:id/gbp', async (req, res) => {
   try {
@@ -305,6 +309,30 @@ app.get('/api/projects/:id/gbp', async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Fout bij ophalen Google Bedrijfsprofiel data: ' + err.message });
+  }
+});
+
+// Maps-statistieken van het eigen profiel. Niet gekoppeld is een eerlijke
+// toestand met HTTP 200, geen serverfout.
+app.get('/api/projects/:id/gbp-performance', async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
+    const data = await getPerformanceSummary(req.params.id, buildWindows(days), {
+      refresh: req.query.refresh === '1'
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen bedrijfsprofiel-statistieken: ' + err.message });
+  }
+});
+
+// Beoordelingen van jezelf en je concurrenten in Google Maps.
+app.get('/api/projects/:id/places', async (req, res) => {
+  try {
+    const data = await getPlacesComparison(req.params.id, { refresh: req.query.refresh === '1' });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen Google Maps-gegevens: ' + err.message });
   }
 });
 
@@ -414,7 +442,7 @@ app.post('/api/projects/:id/gsc/import-keywords', async (req, res) => {
 // Google Analytics 4 (Data API + property-detectie)
 // ----------------------------------------------------
 const ga4Client = require('./services/ga4Client');
-const { buildWindows } = require('./services/insightsEngine');
+// buildWindows staat al bovenaan de Bedrijfsprofiel-sectie.
 
 app.get('/api/ga4/properties', async (req, res) => {
   try {
@@ -1139,6 +1167,8 @@ app.get('/api/settings', (req, res) => {
     // Nooit credentials zelf naar de client sturen; alleen de status.
     settingsObj.gsc_connected = require('./services/gscClient').isConfigured();
     settingsObj.google_ads_connected = require('./services/googleAdsLiveService').isConfigured();
+    settingsObj.gbp_connected = require('./services/gbpService').isConfigured();
+    settingsObj.places_connected = require('./services/placesService').isConfigured();
     for (const key of SECRET_SETTING_KEYS) delete settingsObj[key];
 
     res.json(settingsObj);
@@ -1172,7 +1202,16 @@ const ALLOWED_SETTING_KEYS = new Set([
   'google_ads_client_secret',
   'google_ads_refresh_token',
   'google_ads_customer_id',
-  'google_ads_login_customer_id'
+  'google_ads_login_customer_id',
+  // Gedeelde OAuth-client voor Bedrijfsprofiel en Ads: die API's accepteren
+  // geen service account.
+  'google_oauth_client_id',
+  'google_oauth_client_secret',
+  'google_gbp_refresh_token',
+  'gbp_location_id',
+  // Places: API-sleutel plus het eenmalig opgezochte place_id.
+  'places_api_key',
+  'places_place_id'
 ]);
 
 // Deze waarden mogen nooit terug naar de client; alleen een 'connected' status.
@@ -1181,7 +1220,11 @@ const SECRET_SETTING_KEYS = [
   'google_ads_developer_token',
   'google_ads_client_id',
   'google_ads_client_secret',
-  'google_ads_refresh_token'
+  'google_ads_refresh_token',
+  'google_oauth_client_id',
+  'google_oauth_client_secret',
+  'google_gbp_refresh_token',
+  'places_api_key'
 ];
 
 app.post('/api/settings', (req, res) => {

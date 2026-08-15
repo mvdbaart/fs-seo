@@ -1,8 +1,10 @@
 const db = require('../db');
 const gscClient = require('./gscClient');
 const ga4Client = require('./ga4Client');
+const gbpPerformanceService = require('./gbpPerformanceService');
+const placesService = require('./placesService');
 const { isBrandKeyword } = require('../utils/brandFilter');
-const { recordSnapshots } = require('./metricSnapshots');
+const { recordSnapshots, getSeries } = require('./metricSnapshots');
 
 /**
  * Insights engine: verzamelt uit elke gekoppelde bron wat er beter en slechter
@@ -82,7 +84,15 @@ const THRESHOLDS = {
   'pagespeed.lcp': { minAbs: 0.2, minPct: 0, minBase: 0 },
   'pagespeed.cls': { minAbs: 0.02, minPct: 0, minBase: 0 },
   'crawl.errors': { minAbs: 1, minPct: 0, minBase: 0 },
-  'crawl.pages': { minAbs: 5, minPct: 10, minBase: 20 }
+  'crawl.pages': { minAbs: 5, minPct: 10, minBase: 20 },
+  'gbp.impressions': { minAbs: 100, minPct: 10, minBase: 500 },
+  'gbp.calls': { minAbs: 3, minPct: 15, minBase: 10 },
+  'gbp.directions': { minAbs: 5, minPct: 15, minBase: 20 },
+  'gbp.websiteClicks': { minAbs: 5, minPct: 10, minBase: 25 },
+  'gbp.conversations': { minAbs: 3, minPct: 20, minBase: 5 },
+  'places.rating': { minAbs: 0.1, minPct: 0, minBase: 0 },
+  'places.reviewCount': { minAbs: 2, minPct: 0, minBase: 0 },
+  'places.ratingGap': { minAbs: 0.2, minPct: 0, minBase: 0 }
 };
 
 function round(value, decimals = 2) {
@@ -633,10 +643,171 @@ function collectCrawlSignals(projectId) {
 }
 
 // ----------------------------------------------------
+// Collector: Google Bedrijfsprofiel (Maps-statistieken)
+// ----------------------------------------------------
+
+async function collectGbpSignals(projectId, windows) {
+  const summary = await gbpPerformanceService.getPerformanceSummary(projectId, windows);
+
+  if (!summary.connected) {
+    return {
+      connected: false,
+      reason: summary.reason,
+      message: summary.message,
+      signals: [],
+      movers: {}
+    };
+  }
+
+  if (!summary.comparable || !summary.previousTotals) {
+    return {
+      connected: true,
+      comparable: false,
+      message: summary.message,
+      signals: [],
+      movers: {},
+      // Historie tóch teruggeven zodat de snapshots blijven groeien.
+      detail: { daily: summary.daily, lastDataDay: summary.lastDataDay }
+    };
+  }
+
+  const { totals, previousTotals } = summary;
+  const signal = (id, metric, label, key) => makeSignal({
+    id, source: 'gbp', metric, label, unit: 'count',
+    current: totals[key], previous: previousTotals[key]
+  });
+
+  return {
+    connected: true,
+    comparable: true,
+    signals: [
+      signal('gbp.impressions', 'impressions', 'Weergaven van je bedrijfsprofiel', 'impressions'),
+      signal('gbp.calls', 'calls', 'Telefoontjes via Google', 'calls'),
+      signal('gbp.directions', 'directions', 'Routebeschrijvingen aangevraagd', 'directions'),
+      signal('gbp.websiteClicks', 'websiteClicks', 'Klikken naar je website vanuit Maps', 'websiteClicks'),
+      signal('gbp.conversations', 'conversations', 'Berichten via je bedrijfsprofiel', 'conversations')
+    ],
+    movers: {},
+    detail: {
+      daily: summary.daily,
+      breakdown: summary.breakdown,
+      locationTitle: summary.locationTitle,
+      lastDataDay: summary.lastDataDay
+    }
+  };
+}
+
+// ----------------------------------------------------
+// Collector: Google Maps-beoordelingen (Places)
+// ----------------------------------------------------
+
+/** Laatste snapshot op of vóór een datum; Places kent zelf geen vorige periode. */
+function previousSnapshotValue(projectId, metric, beforeDay, days) {
+  const series = getSeries(projectId, 'places', metric, days);
+  const eligible = series.filter((row) => row.day <= beforeDay);
+  return eligible.length > 0 ? eligible[eligible.length - 1] : null;
+}
+
+async function collectPlacesSignals(projectId, windows) {
+  const comparison = await placesService.getPlacesComparison(projectId);
+
+  if (!comparison.connected) {
+    return {
+      connected: false,
+      reason: comparison.reason,
+      message: comparison.message,
+      signals: [],
+      movers: {}
+    };
+  }
+
+  const own = comparison.own;
+  const lookbackDays = windows.days * 4;
+  const prevRating = previousSnapshotValue(projectId, 'rating', windows.previous.endDate, lookbackDays);
+  const prevReviews = previousSnapshotValue(projectId, 'reviewCount', windows.previous.endDate, lookbackDays);
+
+  const signals = [
+    makeSignal({
+      id: 'places.rating', source: 'places', metric: 'rating',
+      label: 'Je beoordeling in Google Maps', unit: 'rating',
+      current: own.rating, previous: prevRating ? prevRating.value : null
+    }),
+    makeSignal({
+      id: 'places.reviewCount', source: 'places', metric: 'reviewCount',
+      label: 'Aantal Google-reviews', unit: 'count',
+      current: own.reviewCount, previous: prevReviews ? prevReviews.value : null
+    })
+  ];
+
+  // Alleen matches op website tellen mee: een naam-match is te onzeker om een
+  // cijfer op te baseren.
+  const trusted = comparison.competitors.filter(
+    (c) => (c.confidence === 'exact' || c.confidence === 'domain' || c.confidence === 'stored') && typeof c.rating === 'number'
+  );
+
+  if (trusted.length > 0 && typeof own.rating === 'number') {
+    const best = trusted.reduce((a, b) => (b.rating > a.rating ? b : a));
+    const gap = round(own.rating - best.rating, 2);
+
+    // De voorsprong is alleen vergelijkbaar als de verzameling concurrenten
+    // gelijk is gebleven. Een nieuwe concurrent verandert de uitkomst zonder dat
+    // er iets aan de eigen score veranderde — dat zou "je voorsprong slonk"
+    // opleveren terwijl dat feitelijk onjuist is.
+    const currentIds = trusted.map((c) => c.placeId).filter(Boolean).sort().join(',');
+    const prevGap = previousSnapshotValue(projectId, 'ratingGap', windows.previous.endDate, lookbackDays);
+    const sameSet = prevGap && prevGap.meta?.competitorIds === currentIds;
+
+    signals.push(makeSignal({
+      id: 'places.ratingGap', source: 'places', metric: 'ratingGap',
+      label: 'Voorsprong op de best beoordeelde concurrent', unit: 'rating',
+      current: gap, previous: sameSet ? prevGap.value : null,
+      detail: { competitorIds: currentIds, bestCompetitor: best.name, bestRating: best.rating }
+    }));
+  }
+
+  const dataGaps = [];
+  for (const item of comparison.unmatched) {
+    dataGaps.push({
+      source: 'places',
+      message: `"${item.name}" is niet teruggevonden in Google Maps. Controleer de bedrijfsnaam of het domein bij Concurrenten.`
+    });
+  }
+  if (comparison.message) dataGaps.push({ source: 'places', message: comparison.message });
+
+  const ahead = comparison.competitors.filter((c) => typeof c.rating === 'number' && own.rating > c.rating);
+  const behind = comparison.competitors.filter((c) => typeof c.rating === 'number' && own.rating <= c.rating);
+  const asMover = (c) => ({
+    key: c.name,
+    rating: c.rating,
+    reviewCount: c.reviewCount,
+    ratingDelta: typeof own.rating === 'number' ? round(own.rating - c.rating, 2) : null
+  });
+
+  return {
+    connected: true,
+    comparable: true,
+    signals,
+    movers: { placesCompetitors: { winners: ahead.map(asMover), losers: behind.map(asMover) } },
+    detail: {
+      own,
+      competitors: comparison.competitors,
+      unmatched: comparison.unmatched,
+      fetchedDay: comparison.fetchedDay,
+      fromCache: comparison.fromCache
+    },
+    dataGaps
+  };
+}
+
+// ----------------------------------------------------
 // Orchestrator
 // ----------------------------------------------------
 
-function persistSnapshots(projectId, gsc, ga4, rankings) {
+/**
+ * Object-parameter in plaats van positionele argumenten: met zeven collectors
+ * is een verschoven argument een stille bug die niemand opmerkt.
+ */
+function persistSnapshots(projectId, { gsc, ga4, gbp, places, rankings }) {
   const rows = [];
 
   if (gsc?.connected && Array.isArray(gsc.daily)) {
@@ -663,6 +834,40 @@ function persistSnapshots(projectId, gsc, ga4, rankings) {
     }
   }
 
+  if (gbp?.connected && Array.isArray(gbp.detail?.daily)) {
+    for (const d of gbp.detail.daily) {
+      rows.push({ source: 'gbp', metric: 'impressions', day: d.day, value: d.impressions });
+      rows.push({ source: 'gbp', metric: 'calls', day: d.day, value: d.calls });
+      rows.push({ source: 'gbp', metric: 'directions', day: d.day, value: d.directions });
+      rows.push({ source: 'gbp', metric: 'websiteClicks', day: d.day, value: d.websiteClicks });
+      rows.push({ source: 'gbp', metric: 'conversations', day: d.day, value: d.conversations });
+    }
+  }
+
+  // Places kent geen historie in de API zelf: deze snapshots zijn de enige
+  // manier om over tijd te kunnen vergelijken, én ze voeden de dagelijkse
+  // guard die verdere API-kosten voorkomt.
+  if (places?.connected && places.detail?.own && places.detail.fetchedDay) {
+    const day = places.detail.fetchedDay;
+    const own = places.detail.own;
+    rows.push({ source: 'places', metric: 'rating', day, value: own.rating, meta: { name: own.name, mapsUri: own.mapsUri } });
+    rows.push({ source: 'places', metric: 'reviewCount', day, value: own.reviewCount });
+
+    for (const c of places.detail.competitors || []) {
+      if (!c.placeId || c.confidence === 'name') continue;
+      rows.push({ source: 'places', metric: `competitor:${c.id}:rating`, day, value: c.rating, meta: { name: c.name, mapsUri: c.mapsUri } });
+      rows.push({ source: 'places', metric: `competitor:${c.id}:reviewCount`, day, value: c.reviewCount });
+    }
+
+    const gapSignal = (places.signals || []).find((s) => s.id === 'places.ratingGap');
+    if (gapSignal) {
+      rows.push({
+        source: 'places', metric: 'ratingGap', day, value: gapSignal.current,
+        meta: { competitorIds: gapSignal.detail?.competitorIds || '' }
+      });
+    }
+  }
+
   return recordSnapshots(projectId, rows);
 }
 
@@ -678,27 +883,32 @@ async function buildInsightsReport(projectId, { days = 28, refresh = false } = {
 
   const windows = buildWindows(days);
 
+  // ⚠️ Deze vier lijsten zijn volgorde-gekoppeld: een collector toevoegen
+  // betekent hem op dezelfde positie in alle vier opnemen.
   const settled = await Promise.allSettled([
     collectGscSignals(project, windows),
     collectGa4Signals(project, windows),
+    collectGbpSignals(projectId, windows),
+    collectPlacesSignals(projectId, windows),
     Promise.resolve().then(() => collectRankingSignals(projectId, windows)),
     Promise.resolve().then(() => collectPagespeedSignals(projectId)),
     Promise.resolve().then(() => collectCrawlSignals(projectId))
   ]);
 
-  const [gsc, ga4, rankings, pagespeed, crawl] = settled.map((result, i) => {
+  const COLLECTOR_NAMES = ['gsc', 'ga4', 'gbp', 'places', 'rankings', 'pagespeed', 'crawl'];
+
+  const [gsc, ga4, gbp, places, rankings, pagespeed, crawl] = settled.map((result, i) => {
     if (result.status === 'fulfilled') return result.value;
-    const names = ['gsc', 'ga4', 'rankings', 'pagespeed', 'crawl'];
     return {
       connected: false,
       reason: 'error',
-      message: `Ophalen van ${names[i]}-data mislukte: ${result.reason?.message || 'onbekende fout'}`,
+      message: `Ophalen van ${COLLECTOR_NAMES[i]}-data mislukte: ${result.reason?.message || 'onbekende fout'}`,
       signals: [],
       movers: {}
     };
   });
 
-  const collectors = { gsc, ga4, rankings, pagespeed, crawl };
+  const collectors = { gsc, ga4, gbp, places, rankings, pagespeed, crawl };
 
   const signals = Object.values(collectors).flatMap((c) => c.signals || []);
 
@@ -735,7 +945,7 @@ async function buildInsightsReport(projectId, { days = 28, refresh = false } = {
   };
 
   try {
-    persistSnapshots(projectId, gsc, ga4, rankings);
+    persistSnapshots(projectId, collectors);
   } catch (e) {
     // Historie wegschrijven mag de respons nooit blokkeren.
     console.error('[insights] snapshots niet weggeschreven:', e.message);

@@ -1,85 +1,130 @@
-const fs = require('fs');
-const crypto = require('crypto');
 const axios = require('axios');
 const db = require('../db');
+const googleOAuth = require('./googleOAuth');
 
 /**
- * Google Business Profile (My Business) Performance & Insights Service
- * Uses official Google My Business Business Information & Account Management APIs.
+ * Google Bedrijfsprofiel: accounts, vestigingen en profielgezondheid.
+ *
+ * Authenticatie loopt via OAuth, niet via een service account. Google's setup-
+ * documentatie voor de Business Profile API schrijft expliciet een OAuth 2.0
+ * client ID voor ("your app accesses protected, non-public data"); de data is
+ * gebruikerseigendom en een service account werkt alleen met domain-wide
+ * delegation op een Workspace-domein. Zie services/googleOAuth.js.
  */
 
-const GBP_SCOPES = [
-  'https://www.googleapis.com/auth/business.manage'
-].join(' ');
+const ACCOUNTS_URL = 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts';
+const LOCATIONS_READ_MASK = 'name,title,storefrontAddress,primaryPhone,websiteUri,categories';
 
-let cachedToken = null;
-let cachedTokenExpiry = 0;
+// Accounts en vestigingen veranderen zelden; de performance-service leunt
+// hierop, dus één uur cache scheelt twee API-aanroepen per verzoek.
+const LOCATION_CACHE_TTL_MS = 60 * 60 * 1000;
+let locationCache = null;
 
-function loadCredentials() {
-  const candidates = [];
-  if (process.env.FS_GSC_SERVICE_ACCOUNT) candidates.push(process.env.FS_GSC_SERVICE_ACCOUNT);
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) candidates.push(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-
-  const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'gsc_service_account_json'").get();
-  if (settingsRow && settingsRow.value) candidates.push(settingsRow.value);
-
-  for (const candidate of candidates) {
-    const trimmed = candidate.trim();
-    try {
-      const raw = trimmed.startsWith('{') ? trimmed : fs.readFileSync(trimmed, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed.client_email && parsed.private_key) return parsed;
-    } catch (e) {
-      // Ignore
-    }
-  }
-  return null;
-}
-
-function base64url(input) {
-  return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function isConfigured() {
+  return googleOAuth.isConfigured('gbp');
 }
 
 async function getAccessToken() {
-  if (cachedToken && Date.now() < cachedTokenExpiry - 60000) return cachedToken;
+  return googleOAuth.getOAuthToken('gbp');
+}
 
-  const creds = loadCredentials();
-  if (!creds) throw new Error('Service Account niet geconfigureerd. Vul service account in bij Instellingen.');
+/**
+ * Vertaal een Google-fout naar een reden waar een Nederlandse melding aan
+ * gekoppeld kan worden. Gedeeld met gbpPerformanceService.
+ */
+function classifyGoogleError(err) {
+  if (err.oauthReason === 'not_configured') return 'not_configured';
+  if (err.oauthReason === 'invalid_grant') return 'invalid_grant';
 
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-  const claims = base64url(JSON.stringify({
-    iss: creds.client_email,
-    scope: GBP_SCOPES,
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600
-  }));
+  const status = err.response?.status;
+  const message = err.response?.data?.error?.message || err.message || '';
 
-  const signer = crypto.createSign('RSA-SHA256');
-  signer.update(`${header}.${claims}`);
-  const signature = signer.sign(creds.private_key, 'base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  if (/has not been used in project|is disabled|SERVICE_DISABLED/i.test(message)) return 'api_not_enabled';
+  if (status === 429 || /Quota exceeded|quota metric|RESOURCE_EXHAUSTED/i.test(message)) return 'no_quota';
+  if (status === 401 || status === 403) return 'no_access';
+  return 'api_error';
+}
 
-  const response = await axios.post('https://oauth2.googleapis.com/token', new URLSearchParams({
-    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-    assertion: `${header}.${claims}.${signature}`
-  }).toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    timeout: 10000
-  });
+function googleErrorMessage(err) {
+  return err.response?.data?.error?.message || err.message || 'onbekende fout';
+}
 
-  cachedToken = response.data.access_token;
-  cachedTokenExpiry = Date.now() + (response.data.expires_in || 3600) * 1000;
-  return cachedToken;
+/**
+ * Accounts + vestigingen ophalen. Gooit een fout met .gbpReason zodat elke
+ * aanroeper er een eigen Nederlandse melding aan kan hangen.
+ */
+async function listLocations({ refresh = false } = {}) {
+  if (!refresh && locationCache && Date.now() - locationCache.timestamp < LOCATION_CACHE_TTL_MS) {
+    return locationCache.data;
+  }
+
+  try {
+    const token = await getAccessToken();
+
+    const accRes = await axios.get(ACCOUNTS_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10000
+    });
+
+    const accounts = accRes.data?.accounts || [];
+    if (accounts.length === 0) {
+      const err = new Error('Geen bedrijfsprofiel-accounts gevonden voor dit Google-account.');
+      err.gbpReason = 'no_account';
+      throw err;
+    }
+
+    const accountName = accounts[0].name;
+    const locRes = await axios.get(
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=${LOCATIONS_READ_MASK}`,
+      { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 }
+    );
+
+    const data = { accountName, locations: locRes.data?.locations || [] };
+    locationCache = { timestamp: Date.now(), data };
+    return data;
+  } catch (err) {
+    if (!err.gbpReason) err.gbpReason = classifyGoogleError(err);
+    throw err;
+  }
+}
+
+/**
+ * Welke vestiging rapporteren we? Standaard de eerste; met een instelling te
+ * overrulen als er meerdere zijn.
+ */
+function resolveLocationName(locations) {
+  const override = db.prepare("SELECT value FROM settings WHERE key = 'gbp_location_id'").get()?.value;
+  if (override && override.trim()) {
+    const trimmed = override.trim();
+    return trimmed.startsWith('locations/') ? trimmed : `locations/${trimmed}`;
+  }
+  return locations[0]?.name || null;
+}
+
+/**
+ * Nederlandse uitleg per faalmodus. Gedeeld met gbpPerformanceService, zodat
+ * beide schermen dezelfde taal spreken over dezelfde oorzaak.
+ */
+const GBP_REASON_MESSAGES = {
+  not_configured: () => googleOAuth.notConfiguredMessage('gbp'),
+  invalid_grant: () => 'De koppeling met Google Bedrijfsprofiel is verlopen of ingetrokken. Maak een nieuwe verbinding met: node server/oauth-setup.js gbp',
+  api_not_enabled: () => 'De Business Profile API\'s staan nog uit in je Google Cloud-project. Zet "My Business Account Management API", "My Business Business Information API" en "Business Profile Performance API" aan.',
+  no_quota: () => 'Je Google Cloud-project heeft nog geen quotum voor de Business Profile API (0 verzoeken per minuut). Dien het formulier "Application For Basic API Access" in bij Google — een quotumverhoging aanvragen werkt hier niet. Voorwaarde: een geverifieerd profiel dat 60+ dagen actief is.',
+  no_access: () => 'Het gekoppelde Google-account heeft geen toegang tot een bedrijfsprofiel. Log in met het account dat het profiel beheert, of laat je uitnodigen als beheerder via business.google.com → Instellingen → Mensen en toegang.',
+  no_account: () => 'Er is geen bedrijfsprofiel gevonden onder dit Google-account. Controleer of je met het juiste account bent ingelogd.',
+  no_location: () => 'Er is nog geen vestiging gevonden in je bedrijfsprofiel. Controleer of het profiel geverifieerd is.',
+  api_error: (err) => `Google gaf een foutmelding terug: ${googleErrorMessage(err)}`
+};
+
+function reasonMessage(reason, err) {
+  const builder = GBP_REASON_MESSAGES[reason] || GBP_REASON_MESSAGES.api_error;
+  return builder(err || new Error('onbekende fout'));
 }
 
 /**
  * Fetch Google Business Profile Accounts & Locations
  */
 async function getGbpAnalysis(projectId) {
-  const creds = loadCredentials();
-  const serviceAccountEmail = creds ? creds.client_email : null;
-
   const napInfo = {
     name: db.prepare("SELECT value FROM settings WHERE key = 'business_name'").get()?.value || null,
     address: db.prepare("SELECT value FROM settings WHERE key = 'business_address'").get()?.value || null,
@@ -95,28 +140,14 @@ async function getGbpAnalysis(projectId) {
   let errorNotice = null;
 
   try {
-    const token = await getAccessToken();
-    // Call Google My Business Account Management API
-    const accRes = await axios.get('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 6000
-    });
-
-    if (accRes.data && accRes.data.accounts) {
-      connected = true;
-      const accountName = accRes.data.accounts[0].name;
-
-      // Fetch locations under this account
-      const locRes = await axios.get(`https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name,title,storefrontAddress,primaryPhone,websiteUri,categories,rating`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 6000
-      });
-
-      locations = locRes.data.locations || [];
-    }
+    const result = await listLocations();
+    locations = result.locations;
+    connected = true;
   } catch (err) {
-    // Service account error or not invited yet
-    errorNotice = err.response?.data?.error?.message || err.message;
+    // Niet gekoppeld is een normale toestand, geen storing: leg uit wat er mist.
+    errorNotice = GBP_REASON_MESSAGES[err.gbpReason]
+      ? GBP_REASON_MESSAGES[err.gbpReason](err)
+      : googleErrorMessage(err);
   }
 
   // Calculated optimization score & action recommendations
@@ -125,10 +156,8 @@ async function getGbpAnalysis(projectId) {
   if (!connected) {
     recommendations.push({
       category: 'Machtigingen & Koppeling',
-      title: 'Voeg het service account toe als beheerder in Google Bedrijfsprofiel',
-      description: serviceAccountEmail
-        ? `Voeg ${serviceAccountEmail} toe als gebruiker/beheerder via business.google.com ➔ Instellingen ➔ Gebruikers, zodat de Maps-gegevens automatisch kunnen worden ingelezen.`
-        : 'Er is nog geen service account ingesteld. Plak de service-account JSON bij Instellingen en voeg het adres daarna toe als beheerder in Google Bedrijfsprofiel.',
+      title: 'Koppel je Google Bedrijfsprofiel',
+      description: errorNotice,
       priority: 'Kritiek'
     });
   }
@@ -179,7 +208,8 @@ async function getGbpAnalysis(projectId) {
 
   return {
     connected,
-    serviceAccountEmail,
+    // Historisch veld: de koppeling loopt niet meer via een service account.
+    serviceAccountEmail: null,
     napInfo,
     napMessage,
     locations,
@@ -190,4 +220,13 @@ async function getGbpAnalysis(projectId) {
   };
 }
 
-module.exports = { getGbpAnalysis };
+module.exports = {
+  getGbpAnalysis,
+  getAccessToken,
+  isConfigured,
+  listLocations,
+  resolveLocationName,
+  classifyGoogleError,
+  googleErrorMessage,
+  reasonMessage
+};

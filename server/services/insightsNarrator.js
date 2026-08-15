@@ -41,6 +41,15 @@ function fmtSeconds(value) {
 }
 
 /**
+ * Beoordelingen mogen niet worden afgerond zoals fmtCount doet: 4,6 sterren is
+ * geen 5. Elk rating-signaal heeft daarom een eigen template met deze opmaak.
+ */
+function fmtRating(value) {
+  if (value === null || value === undefined) return '—';
+  return nf.format(Math.round(value * 10) / 10);
+}
+
+/**
  * "23% meer" of, als de vorige periode nul was, "van niets naar 40".
  * Voorkomt Infinity% en NaN in de lopende tekst.
  */
@@ -107,7 +116,31 @@ const TEMPLATES = {
 
   'crawl.pages': (s) => s.direction === 'up'
     ? `Je site telt ${fmtCount(s.current)} vindbare pagina's, ${fmtCount(Math.abs(s.delta))} meer dan bij de vorige crawl.`
-    : `Je site telt ${fmtCount(s.current)} vindbare pagina's, ${fmtCount(Math.abs(s.delta))} minder dan bij de vorige crawl.`
+    : `Je site telt ${fmtCount(s.current)} vindbare pagina's, ${fmtCount(Math.abs(s.delta))} minder dan bij de vorige crawl.`,
+
+  'gbp.impressions': (s) => `Je bedrijfsprofiel werd ${fmtCount(s.current)} keer bekeken in Google Zoeken en Maps, ${changePhrase(s)} dan de periode ervoor (${fmtCount(s.previous)}).`,
+
+  'gbp.calls': (s) => s.direction === 'up'
+    ? `${fmtCount(s.current)} mensen belden je rechtstreeks vanuit Google, ${fmtCount(Math.abs(s.delta))} meer dan de periode ervoor.`
+    : `${fmtCount(s.current)} mensen belden je rechtstreeks vanuit Google, ${fmtCount(Math.abs(s.delta))} minder dan de periode ervoor.`,
+
+  'gbp.directions': (s) => `${fmtCount(s.current)} keer vroeg iemand een routebeschrijving naar je vestiging aan (was ${fmtCount(s.previous)}).`,
+
+  'gbp.websiteClicks': (s) => `Vanuit je bedrijfsprofiel klikten ${fmtCount(s.current)} mensen door naar je website, ${changePhrase(s)} dan de periode ervoor (${fmtCount(s.previous)}).`,
+
+  'gbp.conversations': (s) => `Je ontving ${fmtCount(s.current)} berichten via je bedrijfsprofiel (was ${fmtCount(s.previous)}).`,
+
+  'places.rating': (s) => s.sentiment === 'positive'
+    ? `Je beoordeling in Google Maps steeg van ${fmtRating(s.previous)} naar ${fmtRating(s.current)} sterren.`
+    : `Je beoordeling in Google Maps zakte van ${fmtRating(s.previous)} naar ${fmtRating(s.current)} sterren.`,
+
+  'places.reviewCount': (s) => s.direction === 'up'
+    ? `Er kwamen ${fmtCount(Math.abs(s.delta))} Google-reviews bij; je staat nu op ${fmtCount(s.current)} reviews.`
+    : `Je aantal Google-reviews daalde naar ${fmtCount(s.current)} (was ${fmtCount(s.previous)}).`,
+
+  'places.ratingGap': (s) => s.current >= 0
+    ? `Je staat ${fmtRating(Math.abs(s.current))} ster hoger beoordeeld dan je best beoordeelde concurrent.`
+    : `Je best beoordeelde concurrent staat ${fmtRating(Math.abs(s.current))} ster hoger dan jij.`
 };
 
 function describe(signal) {
@@ -172,6 +205,8 @@ function buildHeadline(report) {
 const SOURCE_LABELS = {
   gsc: 'Search Console',
   ga4: 'Google Analytics',
+  gbp: 'het Google Bedrijfsprofiel',
+  places: 'de Google Maps-vergelijking',
   rankings: 'de rank tracker',
   pagespeed: 'PageSpeed',
   crawl: 'de site crawler'
@@ -179,6 +214,16 @@ const SOURCE_LABELS = {
 
 function lowerFirst(text) {
   return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+/**
+ * De bronlabels dragen een lidwoord omdat ze midden in een zin staan
+ * ("Let op: de rank tracker is nog niet gekoppeld"). In een kop moet dat eraf.
+ */
+function sourceTitle(name) {
+  const label = SOURCE_LABELS[name] || name;
+  const stripped = label.replace(/^(de|het)\s+/i, '');
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
 // ----------------------------------------------------
@@ -307,6 +352,46 @@ function buildAdvice(report) {
     });
   }
 
+  const gbpImpressions = s('gbp.impressions');
+  const gbpCalls = s('gbp.calls');
+  const ratingGap = s('places.ratingGap');
+  const ownRating = s('places.rating');
+  const reviewCount = s('places.reviewCount');
+
+  // Zichtbaar in Maps, maar niemand onderneemt actie: het profiel overtuigt niet.
+  if (isPos(gbpImpressions) && isNeg(gbpCalls)) {
+    advice.push({
+      type: 'critical',
+      title: 'Meer mensen vinden je in Maps, minder mensen bellen',
+      description: `Je profiel werd ${fmtCount(gbpImpressions.current)} keer bekeken — meer dan de vorige periode — maar de telefoontjes daalden naar ${fmtCount(gbpCalls.current)}. Bezoekers zien je wel staan, maar worden niet overtuigd om contact op te nemen.`,
+      action: 'Zet actuele foto\'s, kloppende openingstijden en een korte dienstenlijst op je bedrijfsprofiel',
+      priority: 1
+    });
+  }
+
+  // Achterstand in Maps: de beoordeling weegt zwaar in de lokale top 3.
+  if (ratingGap && ratingGap.current !== null && ratingGap.current < 0) {
+    const leader = report.movers.placesCompetitors?.losers?.[0];
+    advice.push({
+      type: 'warning',
+      title: 'Een concurrent staat hoger beoordeeld in Google Maps',
+      description: `Jij staat op ${fmtRating(ownRating?.current)} sterren${leader ? `, "${leader.key}" op ${fmtRating(leader.rating)} sterren met ${fmtCount(leader.reviewCount)} reviews` : ''}. In de lokale top 3 van Maps weegt de beoordeling zwaar mee.`,
+      action: 'Vraag de komende maand actief om reviews bij tevreden klanten',
+      priority: 2
+    });
+  }
+
+  // Onder de 25 reviews telt elke nieuwe review nog zwaar mee.
+  if (reviewCount && reviewCount.current !== null && reviewCount.current < 25) {
+    advice.push({
+      type: 'opportunity',
+      title: `Nog maar ${fmtCount(reviewCount.current)} Google-reviews`,
+      description: 'Onder de 25 reviews weegt elke nieuwe review zwaar mee in je gemiddelde én in je positie in de Maps-resultaten.',
+      action: 'Stuur het reviewsjabloon uit de Local Pack-tab naar je laatste tien klanten',
+      priority: 3
+    });
+  }
+
   // Niets negatiefs gevonden: doorpakken op wat wel werkt.
   if (advice.length === 0 && report.highlights.positive.length > 0) {
     const winner = gscWinners[0];
@@ -328,9 +413,9 @@ function buildAdvice(report) {
     if (!source.connected && source.message) {
       advice.push({
         type: 'opportunity',
-        title: `${SOURCE_LABELS[name] || name} nog niet gekoppeld`,
+        title: `${sourceTitle(name)} nog niet gekoppeld`,
         description: source.message,
-        action: name === 'ga4' || name === 'gsc'
+        action: ['ga4', 'gsc', 'places'].includes(name)
           ? 'Vul de koppeling aan bij Instellingen'
           : 'Voer de genoemde actie uit om deze data te verzamelen',
         priority: 4
@@ -411,7 +496,7 @@ function buildNarrative(report) {
   }));
 
   const watch = report.dataGaps.map((gap) => ({
-    title: SOURCE_LABELS[gap.source] || gap.source,
+    title: sourceTitle(gap.source),
     text: gap.message
   }));
 

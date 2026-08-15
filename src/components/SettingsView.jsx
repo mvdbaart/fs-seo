@@ -27,6 +27,12 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
   const [clarityProjectId, setClarityProjectId] = useState('');
   // Ads-secrets worden nooit teruggegeven door de API; leeg laten = ongewijzigd.
   const [adsConnected, setAdsConnected] = useState(false);
+  const [gbpConnected, setGbpConnected] = useState(false);
+  const [placesConnected, setPlacesConnected] = useState(false);
+  const [oauthClientId, setOauthClientId] = useState('');
+  const [oauthClientSecret, setOauthClientSecret] = useState('');
+  const [placesApiKey, setPlacesApiKey] = useState('');
+  const [gbpLocationId, setGbpLocationId] = useState('');
   const [adsDeveloperToken, setAdsDeveloperToken] = useState('');
   const [adsClientId, setAdsClientId] = useState('');
   const [adsClientSecret, setAdsClientSecret] = useState('');
@@ -167,6 +173,9 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
       if (data.ga4_property_id) setGa4PropertyId(data.ga4_property_id);
       if (data.clarity_project_id) setClarityProjectId(data.clarity_project_id);
       setAdsConnected(Boolean(data.google_ads_connected));
+      setGbpConnected(Boolean(data.gbp_connected));
+      setPlacesConnected(Boolean(data.places_connected));
+      if (data.gbp_location_id) setGbpLocationId(data.gbp_location_id);
       if (data.google_ads_customer_id) setAdsCustomerId(data.google_ads_customer_id);
       if (data.google_ads_login_customer_id) setAdsLoginCustomerId(data.google_ads_login_customer_id);
       if (data.github_token) setGithubToken(data.github_token);
@@ -215,6 +224,7 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
         clarity_project_id: clarityProjectId,
         google_ads_customer_id: adsCustomerId,
         google_ads_login_customer_id: adsLoginCustomerId,
+        gbp_location_id: gbpLocationId,
         github_token: githubToken,
         github_repo: githubRepo,
         remote_fs_next_url: remoteFsNextUrl,
@@ -228,6 +238,9 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
       if (adsClientId.trim()) payload.google_ads_client_id = adsClientId.trim();
       if (adsClientSecret.trim()) payload.google_ads_client_secret = adsClientSecret.trim();
       if (adsRefreshToken.trim()) payload.google_ads_refresh_token = adsRefreshToken.trim();
+      if (oauthClientId.trim()) payload.google_oauth_client_id = oauthClientId.trim();
+      if (oauthClientSecret.trim()) payload.google_oauth_client_secret = oauthClientSecret.trim();
+      if (placesApiKey.trim()) payload.places_api_key = placesApiKey.trim();
 
       await fetch('/api/settings', {
         method: 'POST',
@@ -573,6 +586,45 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
               <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
                 Vind in Clarity Settings ➔ Overview ➔ Project ID. Alleen voor de doorklik; Clarity heeft geen automatische koppeling.
               </span>
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 4px' }}>
+            Google Bedrijfsprofiel &amp; Maps {gbpConnected && <span className="badge badge-success">gekoppeld</span>}
+          </h3>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginBottom: '12px' }}>
+            Bedrijfsprofiel werkt met OAuth, niet met een service account: de gegevens zijn jouw eigendom, dus Google vraagt
+            om jouw toestemming. Maak een OAuth client aan (type &ldquo;Desktop app&rdquo;), vul client ID en secret hieronder in,
+            en draai daarna eenmalig <code>node server/oauth-setup.js gbp</code> om de koppeling af te ronden.
+            Let op: de Business Profile API heeft ook goedkeuring van Google nodig voordat je quotum boven nul komt.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>OAuth client ID</label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Wordt gedeeld met Google Ads.</span>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>OAuth client secret</label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={oauthClientSecret} onChange={(e) => setOauthClientSecret(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+                Places API-sleutel {placesConnected && <span className="badge badge-success">actief</span>}
+              </label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={placesApiKey} onChange={(e) => setPlacesApiKey(e.target.value)} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                Voor beoordelingen van jou en je concurrenten. Wordt maximaal één keer per dag opgehaald.
+              </span>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Vestiging (optioneel)</label>
+              <input type="text" className="input-field" placeholder="Alleen bij meerdere vestigingen"
+                value={gbpLocationId} onChange={(e) => setGbpLocationId(e.target.value)} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Standaard wordt de eerste vestiging gerapporteerd.</span>
             </div>
           </div>
 

@@ -19,6 +19,8 @@ import AiPromptCanvas from './AiPromptCanvas';
 const SOURCE_LABELS = {
   gsc: 'Search Console',
   ga4: 'Analytics',
+  gbp: 'Bedrijfsprofiel',
+  places: 'Google Maps',
   rankings: 'Rankings',
   pagespeed: 'PageSpeed',
   crawl: 'Crawl'
