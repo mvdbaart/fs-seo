@@ -40,6 +40,8 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       domain TEXT NOT NULL,
+      ga4_property_id TEXT,
+      ads_customer_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -272,8 +274,29 @@ function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (campaign_id) REFERENCES google_ads_campaigns(id) ON DELETE CASCADE
     );
+
+    -- Dagelijkse metriek-snapshots per bron. Nodig omdat GSC zelf maar 16 maanden
+    -- historie bewaart en de GA4/GSC-caches in-memory zijn: zonder deze tabel
+    -- verdwijnt elke trend bij een herstart.
+    CREATE TABLE IF NOT EXISTS metric_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      metric TEXT NOT NULL,
+      day TEXT NOT NULL,
+      value REAL,
+      meta TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_metric_snapshots_key
+      ON metric_snapshots(project_id, source, metric, day);
+
+    CREATE INDEX IF NOT EXISTS idx_metric_snapshots_lookup
+      ON metric_snapshots(project_id, source, metric, day DESC);
   `);
-  
+
 
   // Ensure column keywords exists in crawled_pages if table was created previously
   try {
@@ -290,6 +313,18 @@ function initDb() {
 
   try {
     db.exec('ALTER TABLE keyword_rankings ADD COLUMN organic_results TEXT');
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.exec('ALTER TABLE projects ADD COLUMN ga4_property_id TEXT');
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    db.exec('ALTER TABLE projects ADD COLUMN ads_customer_id TEXT');
   } catch (e) {
     // Column already exists
   }

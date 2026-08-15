@@ -1,9 +1,15 @@
 const db = require('../db');
-const axios = require('axios');
+const ga4Client = require('./ga4Client');
+const { buildWindows } = require('./insightsEngine');
 
 /**
- * Service voor het combineren van GA4 (Google Analytics 4) en Microsoft Clarity data
- * met GSC & SEO-posities om geavanceerde Conversie & UX actiepunten te genereren.
+ * GA4-cijfers per landingspagina, met conversie- en UX-advies dat volledig uit
+ * de echte meetdata volgt.
+ *
+ * Microsoft Clarity heeft géén automatische koppeling in deze tool: de Data
+ * Export API vraagt een token dat hier niet beheerd wordt. Rage clicks en dead
+ * clicks worden daarom niet gerapporteerd — in plaats van verzonnen aantallen
+ * krijg je een doorklik naar het Clarity dashboard zelf.
  */
 
 function getSetting(key) {
@@ -15,87 +21,147 @@ function getProject(projectId) {
   return db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
 }
 
-async function getGa4ClarityAnalytics(projectId) {
-  const project = getProject(projectId);
-  if (!project) throw new Error('Project niet gevonden');
+function fmtDuration(seconds) {
+  if (seconds === null || seconds === undefined) return null;
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}m ${total % 60}s`;
+}
 
-  const ga4PropertyId = getSetting('ga4_property_id');
-  const clarityProjectId = getSetting('clarity_project_id');
-  const clarityApiKey = getSetting('clarity_api_key');
+function pct(value) {
+  if (value === null || value === undefined) return null;
+  return `${value.toFixed(1)}%`;
+}
 
-  const isGa4Connected = Boolean(ga4PropertyId);
-  const isClarityConnected = Boolean(clarityProjectId || clarityApiKey);
-
-  // Echte SEO landingspagina's en keywords ophalen uit de rank tracker
-  const trackedKeywords = db.prepare(`
-    SELECT k.keyword, k.target_url, r.position, r.search_volume
-    FROM keywords k
-    LEFT JOIN keyword_rankings r ON k.id = r.keyword_id
-    WHERE k.project_id = ?
-    AND (r.id IS NULL OR r.id = (SELECT id FROM keyword_rankings WHERE keyword_id = k.id ORDER BY checked_at DESC LIMIT 1))
-  `).all(projectId);
-
-  // Geavanceerde gedrags- & conversie inzichten berekenen
-  const landingPageInsights = [];
-  const uxIssues = [];
+/**
+ * Advies uitsluitend op basis van gemeten cijfers. Elke drempel is expliciet,
+ * zodat een aanbeveling altijd te herleiden is tot de getallen in de tabel.
+ */
+function buildGa4Recommendations(landingPages, totals) {
   const recommendations = [];
 
-  const pages = [
-    { url: `${project.domain}/`, title: 'Homepage', visits: 1420, bounceRate: '38%', engagedDuration: '1m 45s', rageClicks: 2, deadClicks: 5, conversionRate: '3.2%' },
-    { url: `${project.domain}/vacatures`, title: 'Vacatures Overzicht', visits: 980, bounceRate: '52%', engagedDuration: '0m 42s', rageClicks: 14, deadClicks: 28, conversionRate: '1.1%' },
-    { url: `${project.domain}/code-95-eindhoven`, title: 'Code 95 Eindhoven', visits: 650, bounceRate: '28%', engagedDuration: '2m 15s', rageClicks: 0, deadClicks: 2, conversionRate: '4.8%' },
-    { url: `${project.domain}/bhv-cursus-eindhoven`, title: 'BHV Cursus Eindhoven', visits: 410, bounceRate: '64%', engagedDuration: '0m 35s', rageClicks: 8, deadClicks: 12, conversionRate: '0.8%' },
-    { url: `${project.domain}/opleidingen`, title: 'Opleidingen Catalogus', visits: 890, bounceRate: '41%', engagedDuration: '1m 10s', rageClicks: 3, deadClicks: 9, conversionRate: '2.4%' }
-  ];
+  if (landingPages.length === 0) {
+    recommendations.push({
+      type: 'info',
+      title: 'Nog geen Analytics-data',
+      description: 'Er zijn nog geen landingspagina\'s met organisch verkeer gemeten in deze periode.',
+      action: 'Controleer of het GA4 Property ID klopt en of het service account leesrechten heeft op de property'
+    });
+    return recommendations;
+  }
 
-  // Identificeer UX & Conversie knelpunten
-  for (const p of pages) {
-    if (p.rageClicks > 5 || p.deadClicks > 15) {
-      uxIssues.push({
-        url: p.url,
-        title: p.title,
-        issueType: p.rageClicks > 5 ? 'Rage Clicks Detected (Frustratie)' : 'Dead Clicks (Niet-klikbare knoppen)',
-        severity: 'Kritiek',
-        description: `Microsoft Clarity registreerde ${p.rageClicks} rage clicks en ${p.deadClicks} dead clicks op ${p.title}. Bezoekers klikken op onklikbare elementen of formulieren werken niet soepel.`,
-        action: 'Bekijk de Clarity session replay en pas de button styling of formuliervalidatie aan.'
-      });
+  const siteConversionRate = totals.sessions > 0 && totals.keyEvents !== null
+    ? (totals.keyEvents / totals.sessions) * 100
+    : null;
+
+  for (const page of landingPages) {
+    // Veel verkeer, weinig conversie: het verlies zit op de pagina zelf.
+    if (siteConversionRate !== null && page.sessions >= 100 && page.keyEvents !== null) {
+      const pageRate = (page.keyEvents / page.sessions) * 100;
+      if (pageRate < siteConversionRate * 0.5) {
+        recommendations.push({
+          type: 'conversion_boost',
+          title: `Veel bezoek, weinig conversie op ${page.path}`,
+          description: `Deze pagina trok ${page.sessions} organische bezoekers maar converteerde ${pageRate.toFixed(1)}%, tegenover ${siteConversionRate.toFixed(1)}% gemiddeld op de site.`,
+          action: 'Zet een duidelijke call-to-action boven de vouw en haal afleiding rond het formulier weg'
+        });
+      }
     }
 
-    if (parseFloat(p.conversionRate) < 1.5 && p.visits > 300) {
+    // Hoge bounce bij substantieel verkeer: de pagina beantwoordt de zoekvraag niet.
+    if (page.sessions >= 100 && page.bounceRate >= 70) {
       recommendations.push({
         type: 'conversion_boost',
-        title: `Hoge SEO Traffic, Lage Conversie op "${p.title}" (${p.conversionRate})`,
-        description: `Deze pagina trekt ${p.visits} organische bezoekers, maar converteert slechts ${p.conversionRate}.`,
-        action: 'Plaats een duidelijke Call-To-Action (bijv. "Vraag direct offerte aan") boven de vouw (above-the-fold).'
+        title: `${pct(page.bounceRate)} van de bezoekers haakt direct af op ${page.path}`,
+        description: `Van de ${page.sessions} bezoekers vertrekt het grootste deel zonder iets te doen. Dat wijst erop dat de pagina niet het antwoord geeft waarop mensen zochten.`,
+        action: 'Zet het antwoord op de zoekvraag in de eerste alinea, boven de vouw'
       });
     }
   }
 
-  // Voeg generiek advies toe als er geen specifieke UX problemen zijn
   if (recommendations.length === 0) {
     recommendations.push({
       type: 'info',
-      title: 'SEO & Conversie Funnel Optimaal',
-      description: 'Je voornaamste SEO-landingspagina’s laten een gezonde betrokkenheidsduur en conversieratio zien.',
-      action: 'Blijf wekelijks de Clarity Heatmaps en GA4 Conversiepaden monitoren.'
+      title: 'Geen conversieknelpunten gevonden',
+      description: `Over ${landingPages.length} landingspagina's zijn geen pagina's met een opvallend lage conversie of hoge bounce gemeten.`,
+      action: 'Bekijk de heatmaps in Clarity om te zien waar bezoekers vastlopen'
     });
   }
 
+  return recommendations.slice(0, 8);
+}
+
+async function getGa4ClarityAnalytics(projectId, days = 28) {
+  const project = getProject(projectId);
+  if (!project) throw new Error('Project niet gevonden');
+
+  const windows = buildWindows(days);
+  const ga4 = await ga4Client.getGa4Summary(project, windows);
+
+  const clarityProjectId = getSetting('clarity_project_id') || null;
+
+  const landingPages = (ga4.landingPages || []).map((page) => ({
+    url: page.path,
+    path: page.path,
+    sessions: page.sessions,
+    engagedSessions: page.engagedSessions,
+    bounceRate: pct(page.bounceRate),
+    engagedDuration: fmtDuration(page.averageSessionDuration),
+    keyEvents: page.keyEvents,
+    conversionRate: (page.keyEvents !== null && page.sessions > 0)
+      ? pct((page.keyEvents / page.sessions) * 100)
+      : null
+  }));
+
+  const totals = ga4.connected
+    ? {
+      totalSessions: ga4.totals.sessions,
+      totalEngagedSessions: ga4.totals.engagedSessions,
+      averageEngagementTime: fmtDuration(ga4.totals.averageSessionDuration),
+      bounceRate: pct(ga4.totals.bounceRate),
+      keyEvents: ga4.totals.keyEvents,
+      overallConversionRate: (ga4.totals.keyEvents !== null && ga4.totals.sessions > 0)
+        ? pct((ga4.totals.keyEvents / ga4.totals.sessions) * 100)
+        : null
+    }
+    : {
+      totalSessions: null,
+      totalEngagedSessions: null,
+      averageEngagementTime: null,
+      bounceRate: null,
+      keyEvents: null,
+      overallConversionRate: null
+    };
+
+  const previousTotals = ga4.connected && ga4.previousTotals
+    ? {
+      totalSessions: ga4.previousTotals.sessions,
+      totalEngagedSessions: ga4.previousTotals.engagedSessions,
+      bounceRate: pct(ga4.previousTotals.bounceRate),
+      keyEvents: ga4.previousTotals.keyEvents
+    }
+    : null;
+
   return {
-    isGa4Connected,
-    isClarityConnected,
-    ga4PropertyId: ga4PropertyId || null,
-    clarityProjectId: clarityProjectId || null,
-    totals: {
-      totalEngagedSessions: isGa4Connected ? 3150 : null,
-      averageEngagementTime: isGa4Connected ? '1m 24s' : null,
-      totalRageClicks: isClarityConnected ? 27 : null,
-      totalDeadClicks: isClarityConnected ? 56 : null,
-      overallConversionRate: isGa4Connected ? '2.4%' : null
-    },
-    landingPageInsights: pages,
-    uxIssues,
-    recommendations
+    isGa4Connected: ga4.connected,
+    // Clarity kent geen automatische koppeling; het project-ID dient alleen
+    // om vanuit deze tool naar het juiste dashboard te kunnen doorklikken.
+    isClarityConnected: false,
+    ga4PropertyId: ga4.propertyId,
+    clarityProjectId,
+    clarityUrl: clarityProjectId
+      ? `https://clarity.microsoft.com/projects/view/${clarityProjectId}`
+      : null,
+    clarityMessage: clarityProjectId
+      ? 'Microsoft Clarity heeft geen automatische koppeling in deze tool. Bekijk rage clicks, dead clicks en heatmaps in het Clarity dashboard zelf.'
+      : 'Vul je Clarity Project ID in bij Instellingen om vanaf hier door te kunnen klikken naar je heatmaps en session replays.',
+    period: windows,
+    totals,
+    previousTotals,
+    landingPageInsights: landingPages,
+    recommendations: ga4.connected ? buildGa4Recommendations(ga4.landingPages || [], ga4.totals) : [],
+    serviceAccountEmail: ga4.serviceAccountEmail,
+    channelWarning: ga4.channelWarning || null,
+    message: ga4.connected ? null : ga4.message
   };
 }
 

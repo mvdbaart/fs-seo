@@ -58,7 +58,11 @@ Optional env vars: `FS_SEO_TOTP_ISSUER` (name shown in the authenticator app), `
 
 ### Data model
 
-Everything is scoped by `project_id` (a project = one domain). `projects` → `keywords` → `keyword_rankings`, `crawl_sessions` → `crawled_pages`, plus `geo_rankings`, `pagespeed_audits`, `competitors`, and a key/value `settings` table. Foreign keys are declared but SQLite enforcement is not enabled — deletes are done manually and explicitly (`DELETE /api/projects/:id` deletes each child table in a transaction).
+Everything is scoped by `project_id` (a project = one domain). `projects` → `keywords` → `keyword_rankings`, `crawl_sessions` → `crawled_pages`, plus `geo_rankings`, `pagespeed_audits`, `metric_snapshots`, `competitors`, and a key/value `settings` table. Deletes are done manually and explicitly (`DELETE /api/projects/:id` deletes each child table in a transaction) — add any new child table to that transaction.
+
+Note: `better-sqlite3` enables `PRAGMA foreign_keys` **by default**, so the declared foreign keys *are* enforced. Inserting a row for a non-existent `project_id` throws `SQLITE_CONSTRAINT_FOREIGNKEY`. (The manual cascade deletes above are therefore belt-and-braces, not the only mechanism.)
+
+`metric_snapshots` stores one row per `(project_id, source, metric, day)` — `source` is `gsc|ga4|rankings|pagespeed|crawl`, `value` is REAL (CTR, CLS and positions are fractional), `meta` is JSON TEXT. A `UNIQUE INDEX` plus `INSERT ... ON CONFLICT DO UPDATE` is the dedupe strategy, so re-running a capture is free and late-arriving GSC data (which lags 2–3 days) self-corrects. This table exists because GSC itself only keeps 16 months and the GSC/GA4 clients cache in-memory only: without it no long-term trend survives a restart. Written from `services/metricSnapshots.js` — never insert into the table directly.
 
 "Current ranking" is expressed as a LEFT JOIN with a correlated subquery picking the newest `keyword_rankings` row per keyword; that query is duplicated in `/api/keywords` and the dashboard route — keep them in sync.
 
@@ -70,7 +74,38 @@ JSON is stored as TEXT (`serp_features`, `diagnostics`, `broken_links`) and pars
 - **PageSpeed**: Google PageSpeed Insights v5 REST API. A failed call now throws (Dutch error message) — there is no mock fallback.
 - **Google Search Console**: real integration via `services/gscClient.js` using a **service account** (the GSC API does not accept plain API keys — `FS_SEO_GSC_API` in `.env.local` is a 39-char API key and therefore unusable for GSC). Credentials resolve: `FS_GSC_SERVICE_ACCOUNT` (path or inline JSON) → `GOOGLE_APPLICATION_CREDENTIALS` → settings row `gsc_service_account_json` (pasted via the Settings UI). JWT signing is hand-rolled with node `crypto` (no googleapis dependency). `services/gscAnalyzer.js` returns live clicks/impressions/CTR when configured (`gscConnected: true`); otherwise it falls back to the project's own stored rankings with `null` for the unknown metrics — nothing is fabricated. `GET /api/settings` returns only a `gsc_connected` boolean, never the service-account JSON.
 
+- **Google Analytics 4**: real integration via `services/ga4Client.js`, built on the same hand-rolled service-account JWT as `gscClient.js` (own token cache — different scope, `analytics.readonly`). It uses **two** Google APIs and both must be enabled *in the same Cloud project as the service account*: the **Data API** (`analyticsdata.googleapis.com`) returns the numbers, the **Admin API** (`analyticsadmin.googleapis.com`) only lists properties. Enabling the Admin API alone yields zero metrics — that is the single most likely cause of an empty GA4 view. Property ID resolves `FS_GA4_PROPERTY_ID` → `projects.ga4_property_id` → settings `ga4_property_id` → **auto-detected** via `accountSummaries` when the service account sees exactly one property (`GET /api/ga4/properties`). `normalizePropertyId` rejects `G-…`/`UA-…` with a Dutch explanation, because pasting the measurement ID is the most common mistake.
+  Two gotchas: (1) never send two `dateRanges` in one `runReport` — the API then injects a hidden `dateRange` dimension column that silently shifts every `dimensionValues` index; the current/previous comparison is therefore two separate calls via `Promise.all`. (2) `conversions` was renamed `keyEvents` in 2024; `runReportWithKeyEvents` tries the new name, falls back once to the old one, remembers which worked, and reports `null` (never `0`) if neither exists.
+- **Google Ads**: `services/googleAdsLiveService.js` via the `google-ads-api` package. The Ads API accepts **neither** an API key **nor** a plain service account (that needs Workspace domain-wide delegation), so it has its own credential set: `google_ads_developer_token`, `google_ads_client_id`, `google_ads_client_secret`, `google_ads_refresh_token`, `google_ads_customer_id`, plus optional `google_ads_login_customer_id` for MCC accounts. Each resolves env-first then settings row. Incomplete credentials return `{connected: false, summary: null, message}` naming exactly what is missing — never numbers. Costs come back in micros (÷ 1e6).
+
 API keys resolve through the same cascade: `FS_*` env var → legacy env aliases → the `settings` table row. Keys live in `.env.local` (loaded by `server/index.js` before `.env`): `FS_SEO_PAGESPEED_API`, `FS_SERPER_API`. `GET /api/settings` includes the `FS_*` names in its fallback.
+
+`GET /api/settings` strips everything in `SECRET_SETTING_KEYS` (the GSC service-account JSON and all four Ads secrets) and returns only `gsc_connected` / `google_ads_connected` booleans. The Settings UI sends a secret **only when the field is non-empty**, so leaving it blank means "unchanged" rather than "erase".
+
+### Insights & advice layer
+
+`GET /api/projects/:id/insights?days=28[&refresh=1]` is the cross-source answer to "what got better, what got worse, and what should I do". Three files, deliberately separated:
+
+- `services/insightsEngine.js` — data only, no prose. `buildWindows(days, lagDays=3)` yields a current and previous window (GSC lags 2–3 days, GA4 ~1, so one shared window keeps sources comparable). Five collectors (GSC, GA4, rankings, PageSpeed, crawl) run under `Promise.allSettled`, so one broken source degrades to an honest `{connected:false, message}` instead of failing the request. Results cache 10 minutes per `projectId:days`; without that cache every tab switch fires ~10 Google calls. **Do not mount this on `GET /api/projects/:id/dashboard`** — that route must stay fast.
+- `services/insightsNarrator.js` — plain Dutch, synchronous, no network, so the screen always shows something true even with no AI key. One sentence template per signal id; `buildAdvice` reuses the `{type,title,description,action}` shape and the house grammar from `aiAdvisor.js`. `buildInsightsPrompt` feeds the optional LLM **only the already-computed numbers**, so it cannot invent figures; it renders through the existing `<AiPromptCanvas>` → `POST /api/ai/generate`, which means the AI pass is opt-in by construction and needs no new route.
+- `services/metricSnapshots.js` — persistence (see the data-model note above).
+
+**`makeSignal()` is the only place sentiment is decided**, and it is the highest-risk logic in this layer:
+
+```js
+const sentiment = direction === 'flat' ? 'neutral'
+  : ((direction === 'up') !== lowerIsBetter ? 'positive' : 'negative');
+```
+
+`lowerIsBetter: true` applies to `gsc.position`, `ga4.bounceRate`, `pagespeed.lcp/cls`, `crawl.errors`, `rankings.avgPosition`. An average position moving 8.0 → 5.0 is `direction:'down'` **and** `sentiment:'positive'`. Any collector that computes its own sentiment is a bug. A `THRESHOLDS` table (`minAbs`/`minPct`/`minBase`) suppresses noise — `minBase` is what stops 2 → 4 clicks reading as "+100%". When `previous === 0`, `deltaPct` is `null`, so every template using it needs a null branch or it prints `Infinity%`.
+
+`aiAdvisor.js` stays separate and untouched: it describes *state* ("12 pagina's zonder title"), the narrator describes *change*. Same output shape, so the same `.rec-card type-*` markup renders both.
+
+Snapshots are written opportunistically on every insights build and explicitly after a crawl, a PageSpeed audit and a ranking check (`captureSnapshots` / `captureRankingSnapshots` in `server/index.js`), plus hourly from `runHourlyTasks` so history keeps growing when nobody opens the dashboard. Snapshot failures are logged and swallowed — they must never break a response.
+
+⚠️ On Vercel `server/db.js` copies the database to `/tmp`, so snapshots written in a serverless invocation are ephemeral. Long-horizon history only accrues on a persistent host.
+
+This renders **on the dashboard**, not in a separate tab: `DashboardView.jsx` fetches the endpoint itself and shows a story card, "Wat gaat goed" / "Wat gaat minder", a movers table, the advice list, a "wat we nog niet kunnen meten" block and the `AiPromptCanvas`. While loading or on error it renders nothing, so the rest of the dashboard is never blocked by it.
 
 ### Live data guarantees
 
@@ -80,7 +115,11 @@ All endpoints derive from real sources (Serper, PageSpeed, GSC, own crawl data, 
 - `POST /api/keywords` performs a live Serper check on insert; without an API key the position stays `null` ("Nog niet gecheckt" in the UI). `search_volume` is `null` — Serper does not provide volumes.
 - `services/geoAnalyzer.js` no longer seeds sample keywords and `getGeoAnalysis` is a pure read; scans run only via `POST /api/projects/:id/geo/check`. Local-pack matching uses the project's domain/name, not a literal string.
 - `services/seoToolsService.js`: local-pack audit reads `geo_rankings` + NAP settings (`business_name/address/phone`); citations are a manual checklist (never claimed "verified"); the internal-link matrix computes real inbound counts from `crawled_pages.internal_links` (JSON link graph persisted per crawl) and returns a `message` field when a (re)crawl is needed; competitor gap reads the stored SERP snapshots and the `competitors` table.
-- When data is missing, endpoints return a Dutch `message` explaining which action (crawl / ranking check / geo scan / GSC koppeling) produces it. Keep this pattern — do not reintroduce fabricated numbers.
+- `services/ga4ClarityService.js` reads live GA4 figures through `ga4Client`. It previously returned a hardcoded fixture (3.150 sessions, 27 rage clicks, 2,4% conversie) and `Ga4ClarityView.jsx` layered a *second* set of fake fallbacks on top (`{totals.x || '3.150'}`) — both are gone. Microsoft Clarity has no automatic integration (its Data Export API needs a token this app does not manage), so rage/dead clicks are not reported at all; the Clarity project ID only builds a deep link to the Clarity dashboard.
+- `services/googleAdsLiveService.js` used to perform a real service-account handshake, discard the token, and return fixed totals (€19.455,66) with an unconditional `statusMessage: '...succesvol gekoppeld!'`. It now runs a real GAQL query or reports honestly that it is not connected.
+- `services/gbpService.js` derives `profileHealthScore` from a real five-point checklist (or `null` when not connected) instead of the former `connected ? 92 : 65`, and its review advice is built from the project's own keywords rather than hardcoded FrisseStart terms. NAP fallbacks are `null` + `napMessage`, not invented company details.
+- `DashboardView.jsx` no longer falls back to `78/100` and `2.4s` for PageSpeed; missing data renders `—` with "Nog geen audit uitgevoerd".
+- When data is missing, endpoints return a Dutch `message` explaining which action (crawl / ranking check / geo scan / GSC koppeling / GA4 property-rechten) produces it. Keep this pattern — do not reintroduce fabricated numbers, and do not add `|| '<some number>'` fallbacks in the views either.
 
 ### FrisseStart-specific hardcoding
 
@@ -88,7 +127,7 @@ Mostly removed; what remains: `geoAnalyzer.js` has a fixed `REGIONS` array (Geld
 
 ### Frontend
 
-`src/App.jsx` is the whole shell: a `activeTab` string switches between the nine views in `src/components/`, and it owns `activeProject` / `allProjects` / `dashboardData`. There is no router, no state library, and no shared API client — each view does its own `fetch` in a `useEffect` and keeps local `useState`. `projectId` is passed down as a prop and views defensively fall back to `projectId || 1`.
+`src/App.jsx` is the whole shell: an `activeTab` string switches between the ~17 views in `src/components/` (grouped in the sidebar under "Analyse & Rankings" and "Optimization Tools"), and it owns `activeProject` / `allProjects` / `dashboardData`. There is no router, no state library, and no shared API client — each view does its own `fetch` in a `useEffect` and keeps local `useState`. `projectId` is passed down as a prop and views defensively fall back to `projectId || 1`.
 
 Styling is a single global `src/index.css`: design tokens as CSS custom properties under `:root` (green `--primary: #059669` FrisseStart palette) plus semantic classes (`.card`, `.card-title`, `.btn btn-primary|secondary|danger`, `.badge badge-success|danger|warning|info`, `.input-field`, `.rec-card type-*`). Components combine those classes with inline `style` objects that reference the same `var(--token)` names. No CSS modules, no Tailwind, no component library — match this pattern rather than introducing one.
 

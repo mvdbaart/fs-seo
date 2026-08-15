@@ -76,7 +76,7 @@ export default function LocalPackView({ projectId, activeProject }) {
 
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
             {data.gbp.connected
-              ? `Je Google Bedrijfsprofiel is live gekoppeld! Gezondheidsscore: ${data.gbp.profileHealthScore}/100.`
+              ? `Je Google Bedrijfsprofiel is gekoppeld. Gezondheidsscore: ${data.gbp.profileHealthScore === null ? 'nog niet te bepalen' : `${data.gbp.profileHealthScore}/100`}.`
               : `Machtig je bestaande Service Account om live statistieken, foto-posts en openingstijden van Google Bedrijfsprofiel automatisch uit te lezen.`}
           </p>
 

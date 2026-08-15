@@ -1,20 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Globe, 
-  Search, 
-  Zap, 
-  AlertTriangle, 
-  CheckCircle, 
-  TrendingUp, 
-  TrendingDown, 
-  BarChart2, 
+import {
+  Globe,
+  Search,
+  Zap,
+  AlertTriangle,
+  CheckCircle,
+  TrendingUp,
+  TrendingDown,
+  BarChart2,
   ShieldCheck,
-  ExternalLink
+  ExternalLink,
+  Lightbulb,
+  RefreshCw
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import AiPromptCanvas from './AiPromptCanvas';
+
+const SOURCE_LABELS = {
+  gsc: 'Search Console',
+  ga4: 'Analytics',
+  rankings: 'Rankings',
+  pagespeed: 'PageSpeed',
+  crawl: 'Crawl'
+};
 
 export default function DashboardView({ data, onCrawlClick, onRankClick, onPageSpeedClick }) {
   const [trendData, setTrendData] = useState([]);
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightDays, setInsightDays] = useState(28);
   const projectId = data?.project?.id;
 
   useEffect(() => {
@@ -33,6 +47,26 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
       })
       .catch(err => console.error('Fout bij ophalen ranking historie:', err));
   }, [projectId]);
+
+  const loadInsights = (days, refresh = false) => {
+    if (!projectId) return;
+    setInsightsLoading(true);
+    fetch(`/api/projects/${projectId}/insights?days=${days}${refresh ? '&refresh=1' : ''}`)
+      .then(res => res.json())
+      .then(result => {
+        // Bij een fout niets tonen: liever geen verhaal dan een verzonnen verhaal.
+        setInsights(result && !result.error ? result : null);
+      })
+      .catch(err => {
+        console.error('Fout bij ophalen inzichten:', err);
+        setInsights(null);
+      })
+      .finally(() => setInsightsLoading(false));
+  };
+
+  useEffect(() => {
+    loadInsights(insightDays);
+  }, [projectId, insightDays]);
 
   if (!data || !data.project) {
     return (
@@ -74,6 +108,100 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
         </div>
       </div>
 
+      {/* Inzichten & Advies: wat ging beter, wat ging minder */}
+      {insights && (
+        <div className="card" style={{ background: 'linear-gradient(135deg, rgba(5,150,105,0.08), rgba(241,139,26,0.05))', borderColor: 'var(--primary-border)' }}>
+          <div className="card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Lightbulb size={20} color="var(--primary)" /> Hoe staat je website ervoor?
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="filter-tabs" style={{ margin: 0 }}>
+                {[7, 28, 90].map(d => (
+                  <button
+                    key={d}
+                    className={`tab-btn ${insightDays === d ? 'active' : ''}`}
+                    onClick={() => setInsightDays(d)}
+                  >
+                    {d} dagen
+                  </button>
+                ))}
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => loadInsights(insightDays, true)}
+                disabled={insightsLoading}
+                title="Opnieuw ophalen bij Google"
+              >
+                <RefreshCw size={14} style={insightsLoading ? { animation: 'spin 1s linear infinite' } : undefined} />
+                Vernieuwen
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+            {Object.entries(insights.sources || {}).map(([key, source]) => (
+              <span
+                key={key}
+                className={`badge ${source.connected && source.comparable ? 'badge-success' : source.connected ? 'badge-info' : 'badge-warning'}`}
+                title={source.message || ''}
+              >
+                {SOURCE_LABELS[key] || key}: {source.connected ? (source.comparable ? 'gekoppeld' : 'nog geen vergelijking') : 'niet gekoppeld'}
+              </span>
+            ))}
+          </div>
+
+          <p style={{ fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '8px' }}>
+            {insights.headline}
+          </p>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+            Periode: {insights.period?.label} — {insights.period?.comparisonLabel}
+          </div>
+        </div>
+      )}
+
+      {insights && (insights.good?.length > 0 || insights.bad?.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div className="card">
+            <div className="card-title">
+              <TrendingUp size={20} color="var(--primary)" /> Wat gaat goed
+            </div>
+            {insights.good.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Geen noemenswaardige verbeteringen in deze periode.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {insights.good.map((item, i) => (
+                  <div key={i} className="rec-card type-opportunity" style={{ padding: '12px 14px' }}>
+                    <div className="rec-desc" style={{ fontSize: '0.85rem', margin: 0 }}>{item.text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-title">
+              <TrendingDown size={20} color="var(--danger)" /> Wat gaat minder
+            </div>
+            {insights.bad.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Geen achteruitgang gemeten in deze periode.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {insights.bad.map((item, i) => (
+                  <div key={i} className="rec-card type-critical" style={{ padding: '12px 14px' }}>
+                    <div className="rec-desc" style={{ fontSize: '0.85rem', margin: 0 }}>{item.text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main KPI Stats */}
       <div className="stats-grid">
         <div className="stat-card" onClick={onCrawlClick} style={{ cursor: 'pointer' }}>
@@ -114,10 +242,12 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
             </div>
           </div>
           <div className="stat-value">
-            {pageSpeed ? `${pageSpeed.performance_score}/100` : '78/100'}
+            {pageSpeed ? `${pageSpeed.performance_score}/100` : '—'}
           </div>
           <div className="stat-subtext">
-            Core Web Vitals LCP: {pageSpeed?.lcp || '2.4s'}
+            {pageSpeed
+              ? `Core Web Vitals LCP: ${pageSpeed.lcp || '—'}`
+              : 'Nog geen audit uitgevoerd'}
           </div>
         </div>
 
@@ -200,6 +330,105 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
           </div>
         </div>
       </div>
+
+      {/* Grootste stijgers & dalers uit Search Console */}
+      {insights && hasMovers(insights.movers) && (
+        <div className="card">
+          <div className="card-title">
+            <BarChart2 size={20} color="var(--primary)" /> Grootste stijgers &amp; dalers
+          </div>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Zoekwoord / pagina</th>
+                  <th>Klikken</th>
+                  <th>Positie</th>
+                  <th>Verschil</th>
+                </tr>
+              </thead>
+              <tbody>
+                {collectMovers(insights.movers).map((m, i) => (
+                  <tr key={i}>
+                    <td style={{ maxWidth: '320px', wordBreak: 'break-word' }}>{m.key}</td>
+                    <td>{m.prevClicks} → {m.clicks}</td>
+                    <td>{m.prevPosition !== null && m.position !== null ? `${m.prevPosition} → ${m.position}` : '—'}</td>
+                    <td>
+                      <span className={`badge ${m.clicksDelta >= 0 ? 'badge-success' : 'badge-danger'}`}>
+                        {m.clicksDelta >= 0 ? '+' : ''}{m.clicksDelta} klikken
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Advies op basis van wat er veranderde */}
+      {insights && insights.advice?.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <ShieldCheck size={20} color="var(--primary)" /> Wat je nu het beste kunt doen
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {insights.advice.map((item, i) => (
+              <div key={i} className={`rec-card type-${item.type}`}>
+                <div className="rec-title">
+                  {item.type === 'critical' && <AlertTriangle size={14} color="var(--danger)" />}
+                  {item.type === 'warning' && <AlertTriangle size={14} color="var(--warning)" />}
+                  {item.type === 'opportunity' && <TrendingUp size={14} color="var(--primary)" />}
+                  {item.title}
+                </div>
+                <div className="rec-desc">{item.description}</div>
+                <div className="rec-action">🚀 Actie: {item.action}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Wat we (nog) niet kunnen meten */}
+      {insights && insights.watch?.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <AlertTriangle size={20} color="var(--warning)" /> Wat we nog niet kunnen meten
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {insights.watch.map((item, i) => (
+              <div key={i} style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                <strong style={{ color: 'var(--text-main)' }}>{item.title}:</strong> {item.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {insights && insights.aiPrompt && (
+        <AiPromptCanvas
+          title="AI: leg dit uit in gewone taal"
+          promptId="insights_narrative"
+          subtitle="Laat een AI dit verhaal herschrijven in jouw communicatiestijl — of kopieer de opdracht naar ChatGPT / Claude / Gemini."
+          promptText={insights.aiPrompt}
+        />
+      )}
     </div>
   );
+}
+
+function collectMovers(movers = {}) {
+  const groups = [movers.gscQueries, movers.gscPages];
+  const rows = [];
+  for (const group of groups) {
+    if (!group) continue;
+    rows.push(...(group.winners || []), ...(group.losers || []));
+  }
+  return rows
+    .sort((a, b) => Math.abs(b.clicksDelta) - Math.abs(a.clicksDelta))
+    .slice(0, 10);
+}
+
+function hasMovers(movers) {
+  return collectMovers(movers).length > 0;
 }

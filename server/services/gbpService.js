@@ -78,13 +78,17 @@ async function getAccessToken() {
  */
 async function getGbpAnalysis(projectId) {
   const creds = loadCredentials();
-  const serviceAccountEmail = creds ? creds.client_email : 'fs-seo-next@frissestart-21fea.iam.gserviceaccount.com';
+  const serviceAccountEmail = creds ? creds.client_email : null;
 
   const napInfo = {
-    name: db.prepare("SELECT value FROM settings WHERE key = 'business_name'").get()?.value || 'FrisseStart Flex & Opleiden BV',
-    address: db.prepare("SELECT value FROM settings WHERE key = 'business_address'").get()?.value || 'De Tienden 26B, 5674 TB Nuenen',
-    phone: db.prepare("SELECT value FROM settings WHERE key = 'business_phone'").get()?.value || '+31408459091'
+    name: db.prepare("SELECT value FROM settings WHERE key = 'business_name'").get()?.value || null,
+    address: db.prepare("SELECT value FROM settings WHERE key = 'business_address'").get()?.value || null,
+    phone: db.prepare("SELECT value FROM settings WHERE key = 'business_phone'").get()?.value || null
   };
+
+  const napMessage = (napInfo.name && napInfo.address && napInfo.phone)
+    ? null
+    : 'Vul bedrijfsnaam, adres en telefoonnummer in bij Instellingen — die zijn nodig om de NAP-gegevens te kunnen controleren.';
 
   let connected = false;
   let locations = [];
@@ -121,41 +125,68 @@ async function getGbpAnalysis(projectId) {
   if (!connected) {
     recommendations.push({
       category: 'Machtigingen & Koppeling',
-      title: 'Voeg Service Account toe als Eigenaar/Beheerder in Google Mijn Bedrijf',
-      description: `Voeg het service account e-mailadres (${serviceAccountEmail}) toe als Gebruiker/Beheerder in Google Bedrijfsprofiel (business.google.com ➔ Instellingen ➔ Gebruikers) om de live Maps data automatisch in te lezen.`,
+      title: 'Voeg het service account toe als beheerder in Google Bedrijfsprofiel',
+      description: serviceAccountEmail
+        ? `Voeg ${serviceAccountEmail} toe als gebruiker/beheerder via business.google.com ➔ Instellingen ➔ Gebruikers, zodat de Maps-gegevens automatisch kunnen worden ingelezen.`
+        : 'Er is nog geen service account ingesteld. Plak de service-account JSON bij Instellingen en voeg het adres daarna toe als beheerder in Google Bedrijfsprofiel.',
       priority: 'Kritiek'
     });
   }
 
+  // Reviewadvies koppelen aan de eigen zoekwoorden in plaats van vaste termen.
+  const topKeywords = db.prepare(
+    'SELECT keyword FROM keywords WHERE project_id = ? ORDER BY id LIMIT 2'
+  ).all(projectId).map((r) => r.keyword);
+
   recommendations.push({
-    category: 'Google Reviews Strategy',
-    title: 'Verzamel 5 nieuwe reviews met zoekwoorden "Code 95" & "Heftruck Geldrop"',
-    description: 'Bedrijven met de zoekwoorden in hun meest recente reviews stijgen gemiddeld 4.2 posities in de Google Maps 3-Pack.',
+    category: 'Reviews',
+    title: topKeywords.length > 0
+      ? `Verzamel nieuwe reviews waarin "${topKeywords.join('" en "')}" voorkomen`
+      : 'Verzamel structureel nieuwe reviews',
+    description: 'Reviews waarin bezoekers je dienst met naam noemen, helpen Google die dienst aan je profiel te koppelen in de lokale resultaten.',
     priority: 'Hoog'
   });
 
   recommendations.push({
-    category: 'Profiel Categorieën',
-    title: 'Koppel Hoofdcategorie "Opleidingscentrum" & Secundair "Uitzendbureau"',
-    description: 'Zorg dat beide takken van FrisseStart als primaire en secundaire bedrijfscategorie in Google Mijn Bedrijf staan ingesteld.',
+    category: 'Profielcategorieën',
+    title: 'Controleer je hoofd- en secundaire bedrijfscategorie',
+    description: 'De hoofdcategorie bepaalt voor welke zoekopdrachten je überhaupt in de lokale resultaten kunt verschijnen. Zorg dat elke tak van het bedrijf een passende categorie heeft.',
     priority: 'Hoog'
   });
 
   recommendations.push({
-    category: 'Google Posts Updates',
-    title: 'Plaats elke 14 dagen een update-post op het Bedrijfsprofiel',
-    description: 'Actieve profielen met regelmatige foto- en nieuws-posts krijgen voorkeur in de lokale zoekresultaten.',
+    category: 'Google Posts',
+    title: 'Plaats elke 14 dagen een update-post op het bedrijfsprofiel',
+    description: 'Actieve profielen met regelmatige foto- en nieuwsposts krijgen voorkeur in de lokale zoekresultaten.',
     priority: 'Medium'
   });
+
+  // Echte checklist in plaats van een vast cijfer: alleen te bepalen als er
+  // daadwerkelijk profielgegevens zijn opgehaald.
+  const healthChecks = connected
+    ? [
+      { key: 'locations', label: 'Vestiging gevonden', ok: locations.length > 0 },
+      { key: 'website', label: 'Website ingevuld', ok: locations.some((l) => !!l.websiteUri) },
+      { key: 'phone', label: 'Telefoonnummer ingevuld', ok: locations.some((l) => !!l.primaryPhone) },
+      { key: 'address', label: 'Adres ingevuld', ok: locations.some((l) => !!l.storefrontAddress) },
+      { key: 'categories', label: 'Meerdere categorieën', ok: locations.some((l) => (l.categories?.additionalCategories?.length || 0) > 0) }
+    ]
+    : null;
+
+  const profileHealthScore = healthChecks
+    ? Math.round((healthChecks.filter((c) => c.ok).length / healthChecks.length) * 100)
+    : null;
 
   return {
     connected,
     serviceAccountEmail,
     napInfo,
+    napMessage,
     locations,
     recommendations,
     errorNotice,
-    profileHealthScore: connected ? 92 : 65
+    healthChecks,
+    profileHealthScore
   };
 }
 

@@ -25,6 +25,14 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
   const [reportRecipients, setReportRecipients] = useState('');
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [clarityProjectId, setClarityProjectId] = useState('');
+  // Ads-secrets worden nooit teruggegeven door de API; leeg laten = ongewijzigd.
+  const [adsConnected, setAdsConnected] = useState(false);
+  const [adsDeveloperToken, setAdsDeveloperToken] = useState('');
+  const [adsClientId, setAdsClientId] = useState('');
+  const [adsClientSecret, setAdsClientSecret] = useState('');
+  const [adsRefreshToken, setAdsRefreshToken] = useState('');
+  const [adsCustomerId, setAdsCustomerId] = useState('');
+  const [adsLoginCustomerId, setAdsLoginCustomerId] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('FrisseStart/fs-next');
   const [remoteFsNextUrl, setRemoteFsNextUrl] = useState('');
@@ -158,6 +166,9 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
       if (data.business_phone) setBusinessPhone(data.business_phone);
       if (data.ga4_property_id) setGa4PropertyId(data.ga4_property_id);
       if (data.clarity_project_id) setClarityProjectId(data.clarity_project_id);
+      setAdsConnected(Boolean(data.google_ads_connected));
+      if (data.google_ads_customer_id) setAdsCustomerId(data.google_ads_customer_id);
+      if (data.google_ads_login_customer_id) setAdsLoginCustomerId(data.google_ads_login_customer_id);
       if (data.github_token) setGithubToken(data.github_token);
       if (data.github_repo) setGithubRepo(data.github_repo);
       if (data.remote_fs_next_url) setRemoteFsNextUrl(data.remote_fs_next_url);
@@ -202,6 +213,8 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
         business_phone: businessPhone,
         ga4_property_id: ga4PropertyId,
         clarity_project_id: clarityProjectId,
+        google_ads_customer_id: adsCustomerId,
+        google_ads_login_customer_id: adsLoginCustomerId,
         github_token: githubToken,
         github_repo: githubRepo,
         remote_fs_next_url: remoteFsNextUrl,
@@ -210,6 +223,11 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
         report_email_recipients: reportRecipients
       };
       if (gscJson.trim()) payload.gsc_service_account_json = gscJson.trim();
+      // Secrets alleen meesturen als ze zijn ingevuld, anders wist opslaan ze.
+      if (adsDeveloperToken.trim()) payload.google_ads_developer_token = adsDeveloperToken.trim();
+      if (adsClientId.trim()) payload.google_ads_client_id = adsClientId.trim();
+      if (adsClientSecret.trim()) payload.google_ads_client_secret = adsClientSecret.trim();
+      if (adsRefreshToken.trim()) payload.google_ads_refresh_token = adsRefreshToken.trim();
 
       await fetch('/api/settings', {
         method: 'POST',
@@ -553,8 +571,49 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
                 onChange={(e) => setClarityProjectId(e.target.value)}
               />
               <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                Vind in Clarity Settings ➔ Overview ➔ Project ID.
+                Vind in Clarity Settings ➔ Overview ➔ Project ID. Alleen voor de doorklik; Clarity heeft geen automatische koppeling.
               </span>
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 4px' }}>
+            Google Ads {adsConnected && <span className="badge badge-success">gekoppeld</span>}
+          </h3>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginBottom: '12px' }}>
+            De Google Ads API accepteert geen service account. Je hebt een developer token nodig (Google Ads ➔ Tools ➔ API Center)
+            plus een OAuth2 client en refresh token. Zolang deze velden leeg zijn, toont de tool geen Ads-cijfers.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Developer token</label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={adsDeveloperToken} onChange={(e) => setAdsDeveloperToken(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Customer ID</label>
+              <input type="text" className="input-field" placeholder="bijv. 1868790470"
+                value={adsCustomerId} onChange={(e) => setAdsCustomerId(e.target.value)} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>10 cijfers, zonder streepjes.</span>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>OAuth client ID</label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={adsClientId} onChange={(e) => setAdsClientId(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>OAuth client secret</label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={adsClientSecret} onChange={(e) => setAdsClientSecret(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Refresh token</label>
+              <input type="password" className="input-field" placeholder="Laat leeg om ongewijzigd te laten"
+                value={adsRefreshToken} onChange={(e) => setAdsRefreshToken(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Login customer ID (optioneel)</label>
+              <input type="text" className="input-field" placeholder="Alleen bij een MCC-account"
+                value={adsLoginCustomerId} onChange={(e) => setAdsLoginCustomerId(e.target.value)} />
             </div>
           </div>
 
