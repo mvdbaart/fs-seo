@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Zap, Smartphone, Monitor, AlertCircle, CheckCircle2, Clock, Cpu } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
 
-export default function PageSpeedView({ projectId, projectDomain }) {
+export default function PageSpeedView({ projectId, projectDomain, onAuditComplete }) {
   const [url, setUrl] = useState(projectDomain || 'https://voorbeeld.nl');
   const [strategy, setStrategy] = useState('mobile');
   const [loading, setLoading] = useState(false);
@@ -50,6 +50,7 @@ export default function PageSpeedView({ projectId, projectDomain }) {
         return;
       }
       setAuditData(data);
+      if (onAuditComplete) onAuditComplete();
     } catch (err) {
       alert('Fout bij uitvoeren PageSpeed audit: ' + err.message);
     } finally {

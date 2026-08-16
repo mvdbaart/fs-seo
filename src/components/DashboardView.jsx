@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   ExternalLink,
   Lightbulb,
-  RefreshCw
+  RefreshCw,
+  ArrowRight
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import AiPromptCanvas from './AiPromptCanvas';
@@ -26,7 +27,20 @@ const SOURCE_LABELS = {
   crawl: 'Crawl'
 };
 
-export default function DashboardView({ data, onCrawlClick, onRankClick, onPageSpeedClick }) {
+const TAB_LABELS = {
+  crawler: 'On-Page Crawler',
+  rankings: 'Rank Tracker',
+  pagespeed: 'PageSpeed Insights',
+  geo: 'Regio GEO Analyse',
+  topicclusters: 'Topic Clusters & Pillars',
+  internallinks: 'Interne Link Matrix',
+  singlepage: 'Single Page Doctor',
+  gsc: 'Search Console',
+  ga4clarity: 'GA4 & Clarity Analytics',
+  contentoptimizer: 'Content Optimizer'
+};
+
+export default function DashboardView({ data, onNavigateTab, onCrawlClick, onRankClick, onPageSpeedClick }) {
   const [trendData, setTrendData] = useState([]);
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -82,6 +96,20 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
   }
 
   const { project, crawlStats = {}, rankStats = {}, pageSpeed, recommendations = [], keywords = [] } = data;
+
+  const handleRecClick = (rec) => {
+    const targetTab = rec.targetTab || 'crawler';
+    const targetFilter = rec.targetFilter || 'all';
+    if (onNavigateTab) {
+      onNavigateTab(targetTab, targetFilter);
+    } else if (targetTab === 'rankings' && onRankClick) {
+      onRankClick();
+    } else if (targetTab === 'pagespeed' && onPageSpeedClick) {
+      onPageSpeedClick();
+    } else if (onCrawlClick) {
+      onCrawlClick();
+    }
+  };
 
   return (
     <div>
@@ -253,7 +281,7 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" onClick={() => onNavigateTab ? onNavigateTab('reports') : null} style={{ cursor: 'pointer' }}>
           <div className="stat-header">
             <span>Kritieke SEO Punten</span>
             <div className="stat-icon-wrapper" style={{ background: 'var(--danger-light)', color: 'var(--danger)' }}>
@@ -311,24 +339,56 @@ export default function DashboardView({ data, onCrawlClick, onRankClick, onPageS
 
         {/* Right Column: AI Action List */}
         <div className="card">
-          <div className="card-title">
-            <ShieldCheck size={20} color="var(--primary)" /> AI SEO Actiepunten
+          <div className="card-title" style={{ justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck size={20} color="var(--primary)" /> AI SEO Actiepunten
+            </span>
+            <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Direct Koppelbaar</span>
           </div>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {recommendations.slice(0, 3).map((rec, i) => (
-              <div key={i} className={`rec-card type-${rec.type}`} style={{ padding: '12px 14px' }}>
-                <div className="rec-title" style={{ fontSize: '0.9rem' }}>
-                  {rec.type === 'critical' && <AlertTriangle size={14} color="var(--danger)" />}
-                  {rec.type === 'warning' && <AlertTriangle size={14} color="var(--warning)" />}
-                  {rec.type === 'opportunity' && <TrendingUp size={14} color="var(--primary)" />}
-                  {rec.title}
+            {recommendations.map((rec, i) => {
+              const targetTab = rec.targetTab || 'crawler';
+              const targetLabel = TAB_LABELS[targetTab] || 'Bekijk details';
+
+              return (
+                <div 
+                  key={i} 
+                  className={`rec-card type-${rec.type} rec-card-interactive`} 
+                  style={{ padding: '12px 14px', marginBottom: 0 }}
+                  onClick={() => handleRecClick(rec)}
+                  title={`Klik om direct naar de ${targetLabel} pagina te gaan voor deze bevinding`}
+                >
+                  <div className="rec-title" style={{ fontSize: '0.9rem', marginBottom: '6px' }}>
+                    {rec.type === 'critical' && <AlertTriangle size={14} color="var(--danger)" />}
+                    {rec.type === 'warning' && <AlertTriangle size={14} color="var(--warning)" />}
+                    {rec.type === 'opportunity' && <TrendingUp size={14} color="var(--primary)" />}
+                    {rec.title}
+                  </div>
+                  <div className="rec-desc" style={{ fontSize: '0.8rem', marginBottom: '8px' }}>
+                    {rec.description}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px dashed var(--border-color)', marginTop: '4px' }}>
+                    <span style={{ fontSize: '0.73rem', fontWeight: 600, color: 'var(--text-muted)', background: 'rgba(0,0,0,0.04)', padding: '2px 8px', borderRadius: '4px' }}>
+                      📍 {targetLabel}
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      Bekijk bevindingen <ArrowRight size={13} />
+                    </span>
+                  </div>
                 </div>
-                <div className="rec-desc" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>
-                  {rec.description}
-                </div>
-              </div>
-            ))}
+              );
+            })}
+
+            {recommendations.length > 3 && (
+              <button 
+                className="btn btn-secondary" 
+                style={{ width: '100%', marginTop: '4px', fontSize: '0.82rem' }}
+                onClick={() => onNavigateTab ? onNavigateTab('reports') : null}
+              >
+                Bekijk Alle {recommendations.length} Rapporten & Adviezen <ArrowRight size={14} />
+              </button>
+            )}
           </div>
         </div>
       </div>

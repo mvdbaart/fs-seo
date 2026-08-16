@@ -15,6 +15,7 @@ build/
 .env.production.local
 *.pem
 frissestart-*.json
+client_secret*.json
 *.json.key
 
 # SQLite Database files

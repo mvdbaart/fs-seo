@@ -591,6 +591,20 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: var(--shadow-sm);
 }
 
+.rec-card-interactive {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.rec-card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-top-color: var(--primary-border);
+  border-right-color: var(--primary-border);
+  border-bottom-color: var(--primary-border);
+  background-color: var(--bg-card-hover, rgba(5, 150, 105, 0.02));
+}
+
 .rec-card.type-critical {
   border-left-color: var(--danger);
 }

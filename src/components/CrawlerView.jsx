@@ -17,12 +17,12 @@ import {
 } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
 
-export default function CrawlerView({ projectId, projectDomain, onCrawlComplete }) {
+export default function CrawlerView({ projectId, projectDomain, initialFilter, onCrawlComplete }) {
   const [startUrl, setStartUrl] = useState(projectDomain || 'https://voorbeeld.nl');
   const [maxPages, setMaxPages] = useState(25);
   const [loading, setLoading] = useState(false);
   const [crawledData, setCrawledData] = useState(null);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState(initialFilter || 'all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPage, setSelectedPage] = useState(null);
   const [wrapText, setWrapText] = useState(true);
@@ -30,6 +30,12 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
   // Sorting state
   const [sortField, setSortField] = useState('url');
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+
+  useEffect(() => {
+    if (initialFilter) {
+      setActiveTab(initialFilter);
+    }
+  }, [initialFilter]);
 
   useEffect(() => {
     if (projectDomain) setStartUrl(projectDomain);
@@ -228,6 +234,9 @@ export default function CrawlerView({ projectId, projectDomain, onCrawlComplete 
               </button>
               <button className={`tab-btn ${activeTab === 'missing_h1' ? 'active' : ''}`} onClick={() => setActiveTab('missing_h1')}>
                 Geen H1 ({pages.filter(p => p.h1_count === 0).length})
+              </button>
+              <button className={`tab-btn ${activeTab === 'missing_alt' ? 'active' : ''}`} onClick={() => setActiveTab('missing_alt')}>
+                Geen Alt ({pages.filter(p => p.images_missing_alt > 0).length})
               </button>
             </div>
 

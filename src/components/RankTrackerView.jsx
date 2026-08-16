@@ -27,7 +27,7 @@ import AiPromptCanvas from './AiPromptCanvas';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { isBrandKeyword } from '../utils/brandFilter';
 
-export default function RankTrackerView({ projectId, activeProject }) {
+export default function RankTrackerView({ projectId, activeProject, initialFilter }) {
   const [keywords, setKeywords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -61,7 +61,13 @@ export default function RankTrackerView({ projectId, activeProject }) {
 
   // Filter & Search & Sort states
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'top3', 'top10', 'improved', 'declined', 'unranked'
+  const [activeFilter, setActiveFilter] = useState(initialFilter || 'all'); // 'all', 'top3', 'top10', 'improved', 'declined', 'unranked'
+
+  useEffect(() => {
+    if (initialFilter) {
+      setActiveFilter(initialFilter);
+    }
+  }, [initialFilter]);
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [sortField, setSortField] = useState('position');
   const [sortOrder, setSortOrder] = useState('asc');

@@ -122,6 +122,17 @@ export default function App() {
   };
 
   const [presetOptimizerData, setPresetOptimizerData] = useState(null);
+  const [crawlerFilter, setCrawlerFilter] = useState('all');
+  const [rankingsFilter, setRankingsFilter] = useState('all');
+
+  const handleNavigateTab = (tabName, filter = 'all') => {
+    if (tabName === 'crawler') {
+      setCrawlerFilter(filter);
+    } else if (tabName === 'rankings') {
+      setRankingsFilter(filter);
+    }
+    setActiveTab(tabName);
+  };
 
   // De ref overleeft StrictMode's dubbele effect-aanroep in dev. Zonder deze
   // guard kunnen twee aanroepen allebei een lege projectenlijst zien en ieder
@@ -153,11 +164,15 @@ export default function App() {
     return () => window.removeEventListener('auth-expired', handleExpired);
   }, []);
 
+  // Haal altijd de nieuwste dashboard data op wanneer het dashboard actief is of het project veranderd
   useEffect(() => {
-    if (authStatus !== 'in' || bootstrappedRef.current) return;
-    bootstrappedRef.current = true;
-    fetchDashboardData(activeProject?.id);
-  }, [authStatus]);
+    if (authStatus === 'in' && activeTab === 'dashboard' && activeProject?.id) {
+      fetchDashboardData(activeProject.id);
+    } else if (authStatus === 'in' && !bootstrappedRef.current) {
+      bootstrappedRef.current = true;
+      fetchDashboardData(activeProject?.id);
+    }
+  }, [authStatus, activeTab, activeProject?.id]);
 
   useEffect(() => {
     const handleOpenOptimizer = (e) => {
@@ -408,9 +423,10 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <DashboardView 
             data={dashboardData}
-            onCrawlClick={() => setActiveTab('crawler')}
-            onRankClick={() => setActiveTab('rankings')}
-            onPageSpeedClick={() => setActiveTab('pagespeed')}
+            onNavigateTab={handleNavigateTab}
+            onCrawlClick={() => handleNavigateTab('crawler')}
+            onRankClick={() => handleNavigateTab('rankings')}
+            onPageSpeedClick={() => handleNavigateTab('pagespeed')}
           />
         )}
 
@@ -447,7 +463,7 @@ export default function App() {
         )}
 
         {activeTab === 'internallinks' && (
-          <InternalLinkView projectId={activeProject?.id} onNavigateTab={(tab) => setActiveTab(tab)} />
+          <InternalLinkView projectId={activeProject?.id} onNavigateTab={(tab) => handleNavigateTab(tab)} />
         )}
 
         {activeTab === 'competitorgap' && (
@@ -465,16 +481,25 @@ export default function App() {
           <CrawlerView 
             projectId={activeProject?.id}
             projectDomain={activeProject?.domain}
+            initialFilter={crawlerFilter}
             onCrawlComplete={() => fetchDashboardData(activeProject?.id)}
           />
         )}
 
         {activeTab === 'rankings' && (
-          <RankTrackerView projectId={activeProject?.id} activeProject={activeProject} />
+          <RankTrackerView 
+            projectId={activeProject?.id} 
+            activeProject={activeProject} 
+            initialFilter={rankingsFilter}
+          />
         )}
 
         {activeTab === 'pagespeed' && (
-          <PageSpeedView projectId={activeProject?.id} projectDomain={activeProject?.domain} />
+          <PageSpeedView 
+            projectId={activeProject?.id} 
+            projectDomain={activeProject?.domain} 
+            onAuditComplete={() => fetchDashboardData(activeProject?.id)}
+          />
         )}
 
         {activeTab === 'reports' && (
