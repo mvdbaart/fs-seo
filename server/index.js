@@ -298,6 +298,10 @@ app.get('/api/projects/:id/schema-audit', async (req, res) => {
 // Google Business Profile (My Business) API Endpoint
 // ----------------------------------------------------
 const { getGbpAnalysis } = require('./services/gbpService');
+const { getPerformanceSummary } = require('./services/gbpPerformanceService');
+const { getPlacesComparison } = require('./services/placesService');
+// buildWindows wordt hier al gebruikt, dus de require moet vóór deze routes staan.
+const { buildWindows } = require('./services/insightsEngine');
 
 app.get('/api/projects/:id/gbp', async (req, res) => {
   try {
@@ -305,6 +309,30 @@ app.get('/api/projects/:id/gbp', async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Fout bij ophalen Google Bedrijfsprofiel data: ' + err.message });
+  }
+});
+
+// Maps-statistieken van het eigen profiel. Niet gekoppeld is een eerlijke
+// toestand met HTTP 200, geen serverfout.
+app.get('/api/projects/:id/gbp-performance', async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
+    const data = await getPerformanceSummary(req.params.id, buildWindows(days), {
+      refresh: req.query.refresh === '1'
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen bedrijfsprofiel-statistieken: ' + err.message });
+  }
+});
+
+// Beoordelingen van jezelf en je concurrenten in Google Maps.
+app.get('/api/projects/:id/places', async (req, res) => {
+  try {
+    const data = await getPlacesComparison(req.params.id, { refresh: req.query.refresh === '1' });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen Google Maps-gegevens: ' + err.message });
   }
 });
 
@@ -369,7 +397,8 @@ const { getGa4ClarityAnalytics } = require('./services/ga4ClarityService');
 
 app.get('/api/projects/:id/ga4-clarity', async (req, res) => {
   try {
-    const data = await getGa4ClarityAnalytics(req.params.id);
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
+    const data = await getGa4ClarityAnalytics(req.params.id, days);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Fout bij ophalen GA4/Clarity data: ' + err.message });
@@ -406,6 +435,140 @@ app.post('/api/projects/:id/gsc/import-keywords', async (req, res) => {
     res.json({ success: true, importedCount: allGscKeywords.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Google Analytics 4 (Data API + property-detectie)
+// ----------------------------------------------------
+const ga4Client = require('./services/ga4Client');
+// buildWindows staat al bovenaan de Bedrijfsprofiel-sectie.
+
+app.get('/api/ga4/properties', async (req, res) => {
+  try {
+    if (!ga4Client.isConfigured()) {
+      return res.json({
+        configured: false,
+        properties: [],
+        message: 'Er is nog geen service account ingesteld. Plak de service-account JSON bij Instellingen.'
+      });
+    }
+    const properties = await ga4Client.listProperties();
+    res.json({
+      configured: true,
+      serviceAccountEmail: ga4Client.getServiceAccountEmail(),
+      properties,
+      message: properties.length === 0
+        ? `Het service account (${ga4Client.getServiceAccountEmail()}) ziet geen enkele GA4 property. Voeg het toe als Lezer bij Beheer > Toegangsbeheer property.`
+        : null
+    });
+  } catch (err) {
+    // Een onbereikbare API is geen serverfout: geef de Nederlandse uitleg terug.
+    res.json({
+      configured: true,
+      properties: [],
+      message: ga4Client.explainError(err, null),
+      error: err.message
+    });
+  }
+});
+
+app.get('/api/projects/:id/ga4', async (req, res) => {
+  try {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project niet gevonden' });
+
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
+    const windows = buildWindows(days);
+    const summary = await ga4Client.getGa4Summary(project, windows);
+
+    res.json({ ...summary, period: windows });
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen Analytics data: ' + err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Inzichten & Advies: wat ging beter/slechter over alle gekoppelde bronnen
+// ----------------------------------------------------
+const { buildInsightsReport, clearCache: clearInsightsCache } = require('./services/insightsEngine');
+const { buildNarrative } = require('./services/insightsNarrator');
+const { getSeries, recordSnapshots } = require('./services/metricSnapshots');
+
+/**
+ * Schrijf een set metrieken weg voor vandaag. Snapshots mogen nooit een
+ * request laten falen: de meting is al gedaan, de historie is bijvangst.
+ * Verse metingen maken de insights-cache ongeldig.
+ */
+function captureSnapshots(projectId, source, metrics) {
+  if (!projectId) return;
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    recordSnapshots(projectId, Object.entries(metrics).map(([metric, value]) => ({
+      source, metric, day, value
+    })));
+    clearInsightsCache(projectId);
+  } catch (err) {
+    console.error(`[snapshots] wegschrijven van ${source} mislukt:`, err.message);
+  }
+}
+
+/** lcp/cls komen als tekst binnen ('2,4 s'); onparsebaar wordt null, geen 0. */
+function parseNumericMetric(value) {
+  if (value === null || value === undefined) return null;
+  const parsed = parseFloat(String(value).replace(',', '.'));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/** Aggregatie van de zojuist uitgevoerde ranking check. */
+function captureRankingSnapshots(projectId) {
+  try {
+    const stats = db.prepare(`
+      SELECT COUNT(*) AS totalKeywords,
+             SUM(CASE WHEN r.position BETWEEN 1 AND 3 THEN 1 ELSE 0 END) AS top3,
+             SUM(CASE WHEN r.position BETWEEN 1 AND 10 THEN 1 ELSE 0 END) AS top10,
+             ROUND(AVG(CASE WHEN r.position > 0 THEN r.position END), 1) AS avgPosition
+      FROM keywords k
+      LEFT JOIN keyword_rankings r ON k.id = r.keyword_id
+      WHERE k.project_id = ?
+        AND (r.id IS NULL OR r.id = (SELECT id FROM keyword_rankings WHERE keyword_id = k.id ORDER BY checked_at DESC LIMIT 1))
+    `).get(projectId);
+
+    if (!stats || !stats.totalKeywords) return;
+    captureSnapshots(projectId, 'rankings', {
+      top3: stats.top3,
+      top10: stats.top10,
+      avgPosition: stats.avgPosition
+    });
+  } catch (err) {
+    console.error('[snapshots] ranking-aggregatie mislukt:', err.message);
+  }
+}
+
+app.get('/api/projects/:id/insights', async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
+    const report = await buildInsightsReport(req.params.id, {
+      days,
+      refresh: req.query.refresh === '1'
+    });
+    const narrative = buildNarrative(report);
+    res.json({ ...report, ...narrative });
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen inzichten: ' + err.message });
+  }
+});
+
+app.get('/api/projects/:id/metrics/history', (req, res) => {
+  try {
+    const { source, metric } = req.query;
+    if (!source || !metric) {
+      return res.status(400).json({ error: 'source en metric zijn verplicht' });
+    }
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 90, 1), 1095);
+    res.json(getSeries(req.params.id, source, metric, days));
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen historie: ' + err.message });
   }
 });
 
@@ -531,6 +694,7 @@ app.delete('/api/projects/:id', (req, res) => {
       db.prepare('DELETE FROM pagespeed_audits WHERE project_id = ?').run(projectId);
       db.prepare('DELETE FROM geo_rankings WHERE project_id = ?').run(projectId);
       db.prepare('DELETE FROM competitors WHERE project_id = ?').run(projectId);
+      db.prepare('DELETE FROM metric_snapshots WHERE project_id = ?').run(projectId);
       db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
     });
 
@@ -715,6 +879,11 @@ app.post('/api/crawl', async (req, res) => {
 
     db.prepare('UPDATE crawl_sessions SET pages_crawled = ?, errors_count = ?, status = ? WHERE id = ?')
       .run(crawlResult.pagesCrawled, errorCount, 'completed', sessionId);
+
+    captureSnapshots(projectId, 'crawl', {
+      errors: errorCount,
+      pages: crawlResult.pagesCrawled
+    });
 
     res.json({
       sessionId,
@@ -919,6 +1088,7 @@ app.post('/api/keywords/check-rankings', async (req, res) => {
   try {
     const { projectId = 1 } = req.body;
     const updatedRankings = await checkKeywordRankings(projectId);
+    captureRankingSnapshots(projectId);
     res.json({ success: true, updatedCount: updatedRankings.length, rankings: updatedRankings });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -945,6 +1115,14 @@ app.post('/api/pagespeed', async (req, res) => {
       auditData.accessibility_score, auditData.seo_score, auditData.best_practices_score,
       auditData.lcp, auditData.cls, auditData.inp, auditData.fcp, auditData.diagnostics
     );
+
+    if (strategy === 'mobile') {
+      captureSnapshots(projectId, 'pagespeed', {
+        performance: auditData.performance_score,
+        lcp: parseNumericMetric(auditData.lcp),
+        cls: parseNumericMetric(auditData.cls)
+      });
+    }
 
     res.json({ ...auditData, diagnostics: JSON.parse(auditData.diagnostics) });
   } catch (err) {
@@ -986,9 +1164,12 @@ app.get('/api/settings', (req, res) => {
       settingsObj.serp_api_key = envSerpKey;
     }
 
-    // Nooit de service account JSON zelf naar de client sturen; alleen de status.
+    // Nooit credentials zelf naar de client sturen; alleen de status.
     settingsObj.gsc_connected = require('./services/gscClient').isConfigured();
-    delete settingsObj.gsc_service_account_json;
+    settingsObj.google_ads_connected = require('./services/googleAdsLiveService').isConfigured();
+    settingsObj.gbp_connected = require('./services/gbpService').isConfigured();
+    settingsObj.places_connected = require('./services/placesService').isConfigured();
+    for (const key of SECRET_SETTING_KEYS) delete settingsObj[key];
 
     res.json(settingsObj);
   } catch (err) {
@@ -1006,14 +1187,45 @@ const ALLOWED_SETTING_KEYS = new Set([
   'business_phone',
   'ga4_property_id',
   'clarity_project_id',
+  'clarity_api_key',
   'github_token',
   'github_repo',
   'remote_fs_next_url',
   'auto_check_enabled',
   'auto_check_frequency',
   'report_email_recipients',
-  'gsc_service_account_json'
+  'gsc_service_account_json',
+  // Google Ads: de Ads API accepteert geen service account, vandaar een eigen
+  // set OAuth-credentials. De secrets worden nooit teruggegeven door GET.
+  'google_ads_developer_token',
+  'google_ads_client_id',
+  'google_ads_client_secret',
+  'google_ads_refresh_token',
+  'google_ads_customer_id',
+  'google_ads_login_customer_id',
+  // Gedeelde OAuth-client voor Bedrijfsprofiel en Ads: die API's accepteren
+  // geen service account.
+  'google_oauth_client_id',
+  'google_oauth_client_secret',
+  'google_gbp_refresh_token',
+  'gbp_location_id',
+  // Places: API-sleutel plus het eenmalig opgezochte place_id.
+  'places_api_key',
+  'places_place_id'
 ]);
+
+// Deze waarden mogen nooit terug naar de client; alleen een 'connected' status.
+const SECRET_SETTING_KEYS = [
+  'gsc_service_account_json',
+  'google_ads_developer_token',
+  'google_ads_client_id',
+  'google_ads_client_secret',
+  'google_ads_refresh_token',
+  'google_oauth_client_id',
+  'google_oauth_client_secret',
+  'google_gbp_refresh_token',
+  'places_api_key'
+];
 
 app.post('/api/settings', (req, res) => {
   try {
@@ -1091,6 +1303,23 @@ app.post('/api/reports/send-email', async (req, res) => {
 // ----------------------------------------------------
 const AUTO_CHECK_INTERVAL_MS = 60 * 60 * 1000; // elk uur kijken of er iets te doen is
 
+/**
+ * Dagelijkse snapshots voor de externe bronnen. Draait mee met de bestaande
+ * uurlijkse taak, zodat de historie ook doorgroeit als niemand het dashboard
+ * opent. De insights-build schrijft zelf al weg; deze aanroep is de vangnet-
+ * variant voor projecten die niemand bekijkt.
+ */
+async function captureDailySnapshots() {
+  const projects = db.prepare('SELECT id FROM projects').all();
+  for (const project of projects) {
+    try {
+      await buildInsightsReport(project.id, { days: 28, refresh: true });
+    } catch (err) {
+      console.error(`[snapshots] project ${project.id} overgeslagen: ${err.message}`);
+    }
+  }
+}
+
 async function runScheduledRankChecks() {
   try {
     const enabledRow = db.prepare("SELECT value FROM settings WHERE key = 'auto_check_enabled'").get();
@@ -1154,6 +1383,7 @@ async function runScheduledRankChecks() {
             });
             console.log(`[auto-report] E-mail succesvol verzonden naar ${recipients}`);
           }
+          captureRankingSnapshots(project.id);
         } catch (err) {
           console.error(`[auto-check] Mislukt voor project ${project.id}:`, err.message);
         }
@@ -1164,8 +1394,13 @@ async function runScheduledRankChecks() {
   }
 }
 
-setInterval(runScheduledRankChecks, AUTO_CHECK_INTERVAL_MS);
-setTimeout(runScheduledRankChecks, 60 * 1000); // eerste controle 1 minuut na opstarten
+async function runHourlyTasks() {
+  await runScheduledRankChecks();
+  await captureDailySnapshots();
+}
+
+setInterval(runHourlyTasks, AUTO_CHECK_INTERVAL_MS);
+setTimeout(runHourlyTasks, 60 * 1000); // eerste controle 1 minuut na opstarten
 
 const googleAdsService = require('./services/googleAdsService');
 const googleAdsLiveService = require('./services/googleAdsLiveService');
@@ -1175,7 +1410,8 @@ const googleAdsLiveService = require('./services/googleAdsLiveService');
 // ----------------------------------------------------
 app.get('/api/google-ads/live-stats', async (req, res) => {
   try {
-    const stats = await googleAdsLiveService.fetchLiveAccountStats('1868790470');
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
+    const stats = await googleAdsLiveService.fetchLiveAccountStats(buildWindows(days));
     res.json(stats);
   } catch (err) {
     res.status(500).json({ error: err.message });

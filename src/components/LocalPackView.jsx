@@ -17,26 +17,62 @@ export default function LocalPackView({ projectId, activeProject }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [copiedReview, setCopiedReview] = useState(false);
+  // Places rekent per aanroep af; na een handmatige verversing gaat de knop
+  // even op slot zodat er niet doorgeklikt wordt.
+  const [refreshLocked, setRefreshLocked] = useState(false);
 
   useEffect(() => {
     fetchLocalPackData();
   }, [projectId]);
 
-  const fetchLocalPackData = async () => {
+  const fetchLocalPackData = async (refreshPlaces = false) => {
     setLoading(true);
+    const id = projectId || 1;
+    const suffix = refreshPlaces ? '?refresh=1' : '';
     try {
-      const [resPack, resGbp] = await Promise.all([
-        fetch(`/api/projects/${projectId || 1}/local-pack`),
-        fetch(`/api/projects/${projectId || 1}/gbp`)
+      const [resPack, resGbp, resPerf, resPlaces] = await Promise.all([
+        fetch(`/api/projects/${id}/local-pack`),
+        fetch(`/api/projects/${id}/gbp`),
+        fetch(`/api/projects/${id}/gbp-performance?days=28`),
+        fetch(`/api/projects/${id}/places${suffix}`)
       ]);
-      const result = await resPack.json();
-      const gbpResult = await resGbp.json();
-      setData({ ...result, gbp: gbpResult });
+      setData({
+        ...(await resPack.json()),
+        gbp: await resGbp.json(),
+        performance: await resPerf.json(),
+        places: await resPlaces.json()
+      });
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRefreshPlaces = () => {
+    if (refreshLocked) return;
+    setRefreshLocked(true);
+    fetchLocalPackData(true);
+    setTimeout(() => setRefreshLocked(false), 60000);
+  };
+
+  const fmtNum = (value) => (value === null || value === undefined ? '—' : Number(value).toLocaleString('nl-NL'));
+  const fmtRating = (value) => (value === null || value === undefined
+    ? '—'
+    : Number(value).toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+
+  const deltaFor = (current, previous) => {
+    if (current === null || current === undefined || previous === null || previous === undefined) return null;
+    const delta = current - previous;
+    const pct = previous !== 0 ? Math.round((delta / Math.abs(previous)) * 1000) / 10 : null;
+    return { delta, pct };
+  };
+
+  const MATCH_BADGES = {
+    exact: { className: 'badge badge-success', text: 'Website komt overeen' },
+    domain: { className: 'badge badge-success', text: 'Website komt overeen' },
+    stored: { className: 'badge badge-success', text: 'Eerder gekoppeld' },
+    name: { className: 'badge badge-warning', text: 'Naam-match — controleer' }
   };
 
   const handleCopyReview = () => {
@@ -70,22 +106,29 @@ export default function LocalPackView({ projectId, activeProject }) {
               <Building2 size={20} color={data.gbp.connected ? 'var(--primary)' : 'var(--warning)'} /> Live Google Mijn Bedrijf Connector & Analyse
             </h3>
             <span className={`badge ${data.gbp.connected ? 'badge-success' : 'badge-warning'}`}>
-              {data.gbp.connected ? 'GMB Live Gekoppeld' : 'GMB API: Koppelings-instructies'}
+              {data.gbp.connected ? 'Bedrijfsprofiel gekoppeld' : 'Bedrijfsprofiel nog niet gekoppeld'}
             </span>
           </div>
 
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
             {data.gbp.connected
-              ? `Je Google Bedrijfsprofiel is live gekoppeld! Gezondheidsscore: ${data.gbp.profileHealthScore}/100.`
-              : `Machtig je bestaande Service Account om live statistieken, foto-posts en openingstijden van Google Bedrijfsprofiel automatisch uit te lezen.`}
+              ? `Je Google Bedrijfsprofiel is gekoppeld. Gezondheidsscore: ${data.gbp.profileHealthScore === null ? 'nog niet te bepalen' : `${data.gbp.profileHealthScore}/100`}.`
+              : 'Koppel je bedrijfsprofiel om live statistieken, openingstijden en categorieën automatisch uit te lezen.'}
           </p>
 
-          <div style={{ background: '#ffffff', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '12px', fontSize: '0.85rem' }}>
-            <strong>🔑 Uitnodiging & Koppeling:</strong>
-            <p style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-              Ga op Google naar je beheerpaneel ➔ <strong>3 stipjes (⋮) ➔ Instellingen voor Bedrijfsprofiel ➔ Mensen en toegang</strong> ➔ Nodig je e-mailadres (bijv. <code>mvdbaart@gmail.com</code>) uit als <em>Beheerder / Manager</em> om de koppeling te voltooien.
-            </p>
-          </div>
+          {!data.gbp.connected && (
+            <div style={{ background: '#ffffff', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '12px', fontSize: '0.85rem' }}>
+              <strong>🔑 Zo koppel je het:</strong>
+              <ol style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.82rem', paddingLeft: '18px', lineHeight: 1.8 }}>
+                <li>Maak in de Google Cloud Console een <strong>OAuth client ID</strong> aan van het type &ldquo;Desktop app&rdquo; en vul client ID en secret in bij Instellingen.</li>
+                <li>Draai eenmalig <code>node server/oauth-setup.js gbp</code> en log in met het account dat het bedrijfsprofiel beheert.</li>
+                <li>Vraag bij Google toegang aan tot de Business Profile API (formulier <em>Application for Basic API Access</em>). Zonder die goedkeuring staat je quotum op nul.</li>
+              </ol>
+              <p style={{ marginTop: '8px', color: 'var(--text-dim)', fontSize: '0.78rem', marginBottom: 0 }}>
+                Een service account werkt hier niet: de profielgegevens zijn jouw eigendom, dus Google vraagt om jouw eigen toestemming.
+              </p>
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>📋 Live Aanbevelingen voor je Bedrijfsprofiel:</strong>
@@ -99,6 +142,170 @@ export default function LocalPackView({ projectId, activeProject }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Statistieken van het bedrijfsprofiel (Business Profile Performance API) */}
+      {data.performance && (
+        <div className="card">
+          <h3 className="card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Navigation size={20} color="var(--primary)" /> Statistieken van je bedrijfsprofiel
+              {data.performance.locationTitle && (
+                <span className="badge badge-info">{data.performance.locationTitle}</span>
+              )}
+            </span>
+            {data.performance.connected && data.performance.lastDataDay && (
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+                Cijfers t/m {data.performance.lastDataDay}
+              </span>
+            )}
+          </h3>
+
+          {!data.performance.connected || !data.performance.totals ? (
+            <div style={{ background: 'var(--warning-light)', border: '1px solid var(--warning)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <AlertTriangle size={16} color="var(--warning)" />
+                <span className="badge badge-warning">Statistieken nog niet beschikbaar</span>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                {data.performance.message}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+                {[
+                  { key: 'impressions', label: 'Profielweergaven' },
+                  { key: 'calls', label: 'Telefoontjes' },
+                  { key: 'directions', label: 'Routeaanvragen' },
+                  { key: 'websiteClicks', label: 'Websiteklikken' },
+                  { key: 'conversations', label: 'Berichten' }
+                ].map(({ key, label }) => {
+                  const current = data.performance.totals[key];
+                  const previous = data.performance.previousTotals?.[key];
+                  const change = deltaFor(current, previous);
+                  // Voor al deze metrieken is meer altijd beter.
+                  const color = !change || change.delta === 0
+                    ? 'var(--text-dim)'
+                    : change.delta > 0 ? 'var(--primary)' : 'var(--danger)';
+                  return (
+                    <div key={key} className="stat-card">
+                      <div className="stat-header"><span>{label}</span></div>
+                      <div className="stat-value">{fmtNum(current)}</div>
+                      <div className="stat-subtext" style={{ color }}>
+                        {change === null
+                          ? 'Geen vergelijking beschikbaar'
+                          : `${change.delta > 0 ? '▲ +' : change.delta < 0 ? '▼ ' : '— '}${fmtNum(Math.abs(change.delta))}${change.pct !== null ? ` (${change.delta > 0 ? '+' : '−'}${Math.abs(change.pct).toLocaleString('nl-NL')}%)` : ''}`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {data.performance.breakdown && (
+                <div style={{ marginTop: '14px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Uitsplitsing weergaven: Maps {fmtNum(data.performance.breakdown.mapsImpressions)} ·
+                  {' '}Zoeken {fmtNum(data.performance.breakdown.searchImpressions)} ·
+                  {' '}mobiel {fmtNum(data.performance.breakdown.mobileImpressions)} ·
+                  {' '}desktop {fmtNum(data.performance.breakdown.desktopImpressions)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Beoordelingen in Google Maps, jij versus je concurrenten (Places API) */}
+      {data.places && (
+        <div className="card">
+          <h3 className="card-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Star size={20} color="var(--primary)" /> Hoe scoor je in Google Maps?
+            </span>
+            {data.places.connected && (
+              <button
+                className="btn btn-secondary"
+                onClick={handleRefreshPlaces}
+                disabled={refreshLocked || loading}
+                title="Haalt de cijfers opnieuw op bij Google (één keer per dag is genoeg)"
+              >
+                {refreshLocked ? 'Zojuist ververst' : 'Vernieuwen'}
+              </button>
+            )}
+          </h3>
+
+          {!data.places.connected || !data.places.own ? (
+            <div style={{ background: 'var(--warning-light)', border: '1px solid var(--warning)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>{data.places.message}</p>
+            </div>
+          ) : (
+            <>
+              <div className="table-container">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Bedrijf</th>
+                      <th>Score</th>
+                      <th>Reviews</th>
+                      <th>Verschil</th>
+                      <th>Match</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ background: 'var(--primary-light)', fontWeight: 600 }}>
+                      <td>
+                        {data.places.own.mapsUri ? (
+                          <a href={data.places.own.mapsUri} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>
+                            {data.places.own.name}
+                          </a>
+                        ) : data.places.own.name}
+                      </td>
+                      <td>⭐ {fmtRating(data.places.own.rating)}</td>
+                      <td>{fmtNum(data.places.own.reviewCount)}</td>
+                      <td>—</td>
+                      <td><span className="badge badge-info">Jij</span></td>
+                    </tr>
+                    {data.places.competitors.map((c) => {
+                      const badge = MATCH_BADGES[c.confidence] || MATCH_BADGES.name;
+                      const gap = (typeof data.places.own.rating === 'number' && typeof c.rating === 'number')
+                        ? Math.round((data.places.own.rating - c.rating) * 10) / 10
+                        : null;
+                      return (
+                        <tr key={c.id}>
+                          <td>
+                            {c.mapsUri ? (
+                              <a href={c.mapsUri} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>{c.name}</a>
+                            ) : c.name}
+                          </td>
+                          <td>⭐ {fmtRating(c.rating)}</td>
+                          <td>{fmtNum(c.reviewCount)}</td>
+                          <td style={{ color: gap === null ? 'var(--text-dim)' : gap >= 0 ? 'var(--primary)' : 'var(--danger)' }}>
+                            {gap === null ? '—' : `${gap >= 0 ? '+' : '−'}${fmtRating(Math.abs(gap))}`}
+                          </td>
+                          <td><span className={badge.className}>{badge.text}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {data.places.unmatched?.length > 0 && (
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '12px' }}>
+                  Niet teruggevonden in Google Maps: {data.places.unmatched.map((u) => u.name).join(', ')} — controleer de
+                  bedrijfsnaam of het domein bij Concurrenten.
+                </p>
+              )}
+
+              {data.places.fetchedDay && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '8px' }}>
+                  Cijfers opgehaald op {data.places.fetchedDay}
+                  {data.places.fromCache ? ' (uit de opgeslagen meting van vandaag)' : ''}.
+                </p>
+              )}
+            </>
+          )}
         </div>
       )}
 

@@ -170,8 +170,8 @@ export default function GoogleAdsStudio({ projectId }) {
         </div>
       </div>
 
-      {/* Live Account Stats Bar */}
-      {liveStats && (
+      {/* Live Account Stats Bar — alleen bij een echte koppeling */}
+      {liveStats?.summary && (
         <div className="card" style={{ background: '#f8fafc', border: '1px solid var(--border-color)', padding: '16px 20px', borderRadius: 'var(--radius-lg)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
             <div>
@@ -179,29 +179,41 @@ export default function GoogleAdsStudio({ projectId }) {
                 <CheckCircle2 size={14} color="var(--primary)" /> Gekoppeld Google Ads Account #{liveStats.customerId}
               </div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                {liveStats.statusMessage}
+                Periode: {liveStats.period?.label}
               </span>
             </div>
 
             <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
               <div>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Totale Klikken</span>
-                <strong style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>{liveStats.summary.totalClicks.toLocaleString()}</strong>
+                <strong style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>{liveStats.summary.totalClicks.toLocaleString('nl-NL')}</strong>
               </div>
               <div>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Vertoningen</span>
-                <strong style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>{liveStats.summary.totalImpressions.toLocaleString()}</strong>
+                <strong style={{ fontSize: '1.1rem', color: 'var(--text-main)' }}>{liveStats.summary.totalImpressions.toLocaleString('nl-NL')}</strong>
               </div>
               <div>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Gem. CTR</span>
-                <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>{liveStats.summary.ctr}</strong>
+                <strong style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>{liveStats.summary.ctr || '—'}</strong>
               </div>
               <div>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Totale Bestedingen</span>
-                <strong style={{ fontSize: '1.1rem', color: 'var(--brand-orange)' }}>{liveStats.summary.totalCost}</strong>
+                <strong style={{ fontSize: '1.1rem', color: 'var(--brand-orange)' }}>{liveStats.summary.totalCostFormatted}</strong>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Geen koppeling: vertel wat er ontbreekt in plaats van cijfers te tonen */}
+      {liveStats && !liveStats.summary && (
+        <div className="card" style={{ borderColor: 'var(--warning)', background: 'var(--warning-light)', padding: '16px 20px' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '6px' }}>
+            Google Ads is nog niet gekoppeld
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+            {liveStats.message}
+          </p>
         </div>
       )}
       <div className="card" style={{ background: 'var(--primary-light)', border: '1px solid var(--primary-border)', padding: '18px 22px', borderRadius: 'var(--radius-lg)' }}>
