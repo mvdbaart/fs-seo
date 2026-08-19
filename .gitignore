@@ -47,3 +47,6 @@ logs/
 gsc_analysis_*.json
 candidates_*.json
 import_result.json
+*.corrupt_backup*
+scratch/
+scripts/data_dump.json

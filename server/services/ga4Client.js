@@ -39,6 +39,8 @@ const ORGANIC_FILTER = {
 
 const BASE_METRICS = ['sessions', 'engagedSessions', 'averageSessionDuration', 'bounceRate'];
 
+const path = require('path');
+
 function loadCredentials() {
   const candidates = [];
   if (process.env.FS_GSC_SERVICE_ACCOUNT) candidates.push(process.env.FS_GSC_SERVICE_ACCOUNT);
@@ -51,7 +53,15 @@ function loadCredentials() {
     const trimmed = String(candidate).trim();
     if (!trimmed) continue;
     try {
-      const raw = trimmed.startsWith('{') ? trimmed : fs.readFileSync(trimmed, 'utf8');
+      let raw;
+      if (trimmed.startsWith('{')) {
+        raw = trimmed;
+      } else {
+        const filePath = path.isAbsolute(trimmed)
+          ? trimmed
+          : path.resolve(__dirname, '../../', trimmed);
+        raw = fs.readFileSync(filePath, 'utf8');
+      }
       const parsed = JSON.parse(raw);
       if (parsed.client_email && parsed.private_key) return parsed;
     } catch (e) {

@@ -9,11 +9,15 @@ import {
   Building2, 
   Share2, 
   Phone, 
-  Navigation
+  Navigation,
+  Sparkles,
+  Send
 } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
+import GbpPostStudio from './GbpPostStudio';
 
 export default function LocalPackView({ projectId, activeProject }) {
+  const [subTab, setSubTab] = useState('audit'); // 'audit' | 'posts'
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [copiedReview, setCopiedReview] = useState(false);
@@ -82,33 +86,56 @@ export default function LocalPackView({ projectId, activeProject }) {
     setTimeout(() => setCopiedReview(false), 2500);
   };
 
-  if (!data) return <div className="card">Laden van Google Bedrijfsprofiel & Local Pack gegevens...</div>;
+  if (!data && subTab === 'audit') return <div className="card">Laden van Google Bedrijfsprofiel & Local Pack gegevens...</div>;
 
-  const { napInfo, localRankings, citations, actionItems, reviewTemplate } = data;
+  const { napInfo, localRankings, citations, actionItems, reviewTemplate } = data || {};
 
   return (
-    <div>
-      {/* Header Banner */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(5,150,105,0.08), rgba(241,139,26,0.05))', borderColor: 'var(--primary-border)' }}>
-        <div className="card-title">
-          <MapPin size={20} color="var(--primary)" /> Google Bedrijfsprofiel & Local Pack Audit (Google Maps Top 3)
-        </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Local pack aanwezigheid per regio op basis van de laatste regionale scan, plus een checklist voor consistente bedrijfsvermeldingen.
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      
+      {/* Subtab Bar */}
+      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+        <button
+          className={`btn ${subTab === 'audit' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          onClick={() => setSubTab('audit')}
+        >
+          <MapPin size={16} /> Google Maps & Bedrijfsprofiel Audit
+        </button>
+        <button
+          className={`btn ${subTab === 'posts' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          onClick={() => setSubTab('posts')}
+        >
+          <Sparkles size={16} /> Google Posts Studio (AI & Publiceren)
+        </button>
       </div>
 
-      {/* Google Bedrijfsprofiel (My Business) API Live Status Card */}
-      {data.gbp && (
-        <div className="card" style={{ border: data.gbp.connected ? '1px solid var(--primary-border)' : '1px solid #fef0c7', background: data.gbp.connected ? 'var(--primary-light)' : '#fffaeb' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 className="card-title" style={{ margin: 0, fontSize: '1.1rem' }}>
-              <Building2 size={20} color={data.gbp.connected ? 'var(--primary)' : 'var(--warning)'} /> Live Google Mijn Bedrijf Connector & Analyse
-            </h3>
-            <span className={`badge ${data.gbp.connected ? 'badge-success' : 'badge-warning'}`}>
-              {data.gbp.connected ? 'Bedrijfsprofiel gekoppeld' : 'Bedrijfsprofiel nog niet gekoppeld'}
-            </span>
+      {subTab === 'posts' ? (
+        <GbpPostStudio projectId={projectId} activeProject={activeProject} />
+      ) : (
+        <>
+          {/* Header Banner */}
+          <div className="card" style={{ background: 'linear-gradient(135deg, rgba(5,150,105,0.08), rgba(241,139,26,0.05))', borderColor: 'var(--primary-border)' }}>
+            <div className="card-title">
+              <MapPin size={20} color="var(--primary)" /> Google Bedrijfsprofiel & Local Pack Audit (Google Maps Top 3)
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              Local pack aanwezigheid per regio op basis van de laatste regionale scan, plus een checklist voor consistente bedrijfsvermeldingen.
+            </p>
           </div>
+
+          {/* Google Bedrijfsprofiel (My Business) API Live Status Card */}
+          {data?.gbp && (
+            <div className="card" style={{ border: data.gbp.connected ? '1px solid var(--primary-border)' : '1px solid #fef0c7', background: data.gbp.connected ? 'var(--primary-light)' : '#fffaeb' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 className="card-title" style={{ margin: 0, fontSize: '1.1rem' }}>
+                  <Building2 size={20} color={data.gbp.connected ? 'var(--primary)' : 'var(--warning)'} /> Live Google Mijn Bedrijf Connector & Analyse
+                </h3>
+                <span className={`badge ${data.gbp.connected ? 'badge-success' : 'badge-warning'}`}>
+                  {data.gbp.connected ? 'Bedrijfsprofiel gekoppeld' : 'Bedrijfsprofiel nog niet gekoppeld'}
+                </span>
+              </div>
 
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
             {data.gbp.connected
@@ -490,8 +517,10 @@ export default function LocalPackView({ projectId, activeProject }) {
 
       <AiPromptCanvas
         title="AI Prompt: Google Maps Top 3 & Local Pack Optimalisatie"
-        promptText={`Je bent een Senior Local SEO & Google Maps Specialist. Ons bedrijf ${napInfo.name} (${activeProject?.domain || 'frissestart.nl'}) staat organisch al op #1 in Google.nl, maar we verschijnen nog niet in de Google Maps 3-Pack (Local Pack) voor onze regio's (${localRankings.map(r => r.city).join(', ')}).\n\nHuidige NAP Gegevens:\n- Bedrijfsnaam: ${napInfo.name}\n- Adres: ${napInfo.address}\n- Telefoonnummer: ${napInfo.phone}\n\nOpdracht:\n1. Schrijf een strategie om het Google Bedrijfsprofiel (voormalig Google Mijn Bedrijf) optimaal in te richten met de juiste hoofdcategorie en secundaire categorieën voor heftruck-, reachtruck- en veiligheidscursussen.\n2. Schrijf 3 wervende updates/posts die we wekelijks kunnen plaatsen op ons Google Bedrijfsprofiel met lokale zoekwoorden.\n3. Schrijf 5 voorbeelden van reviews met lokale zoekwoorden die we als inspiratie naar cursisten kunnen sturen.`}
+        promptText={`Je bent een Senior Local SEO & Google Maps Specialist. Ons bedrijf ${napInfo?.name || 'FrisseStart'} (${activeProject?.domain || 'frissestart.nl'}) staat organisch al op #1 in Google.nl, maar we verschijnen nog niet in de Google Maps 3-Pack (Local Pack) voor onze regio's (${(localRankings || []).map(r => r.city).join(', ')}).\n\nHuidige NAP Gegevens:\n- Bedrijfsnaam: ${napInfo?.name || 'FrisseStart'}\n- Adres: ${napInfo?.address || 'Nuenen'}\n- Telefoonnummer: ${napInfo?.phone || ''}\n\nOpdracht:\n1. Schrijf een strategie om het Google Bedrijfsprofiel (voormalig Google Mijn Bedrijf) optimaal in te richten met de juiste hoofdcategorie en secundaire categorieën voor heftruck-, reachtruck- en veiligheidscursussen.\n2. Schrijf 3 wervende updates/posts die we wekelijks kunnen plaatsen op ons Google Bedrijfsprofiel met lokale zoekwoorden.\n3. Schrijf 5 voorbeelden van reviews met lokale zoekwoorden die we als inspiratie naar cursisten kunnen sturen.`}
       />
+        </>
+      )}
     </div>
   );
 }

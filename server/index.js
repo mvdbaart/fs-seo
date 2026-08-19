@@ -30,6 +30,7 @@ const {
 const { generateAiContent } = require('./services/aiGenerator');
 const authRouter = require('./auth/routes');
 const { requireAuth } = require('./auth/middleware');
+const cronRouter = require('./cronRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,14 +52,14 @@ if (process.env.FS_SEO_CORS_ORIGINS) {
 }
 
 // ----------------------------------------------------
-// Authentication
+// Authentication & Cron Gate
 //
 // Order is load-bearing: Express matches in declaration order, so the gate must
-// sit above the ~60 routes below. Mounting the public auth router on its own
-// prefix first avoids needing a skip-list (a skip-list is how you ship a hole:
-// a typo, a trailing slash, or a new public route nobody remembers to add).
+// sit above the ~60 routes below. Mounting the public auth and cron routers on
+// their own prefixes first avoids needing a skip-list.
 // ----------------------------------------------------
 app.use('/api/auth', authRouter);
+app.use('/api/cron', cronRouter);
 app.use('/api', requireAuth);
 
 // ----------------------------------------------------
@@ -300,6 +301,7 @@ app.get('/api/projects/:id/schema-audit', async (req, res) => {
 const { getGbpAnalysis } = require('./services/gbpService');
 const { getPerformanceSummary } = require('./services/gbpPerformanceService');
 const { getPlacesComparison } = require('./services/placesService');
+const gbpPostService = require('./services/gbpPostService');
 // buildWindows wordt hier al gebruikt, dus de require moet vóór deze routes staan.
 const { buildWindows } = require('./services/insightsEngine');
 
@@ -333,6 +335,52 @@ app.get('/api/projects/:id/places', async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Fout bij ophalen Google Maps-gegevens: ' + err.message });
+  }
+});
+
+// Google Bedrijfsprofiel Posts / Updates
+app.get('/api/projects/:id/gbp/posts', (req, res) => {
+  try {
+    const posts = gbpPostService.listPosts(req.params.id);
+    res.json({ posts, presets: gbpPostService.PRESET_TOPICS });
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij ophalen Google Posts: ' + err.message });
+  }
+});
+
+app.post('/api/projects/:id/gbp/posts/generate', async (req, res) => {
+  try {
+    const generated = await gbpPostService.generatePostWithAi(req.body);
+    res.json(generated);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij genereren Google Post met AI: ' + err.message });
+  }
+});
+
+app.post('/api/projects/:id/gbp/posts', (req, res) => {
+  try {
+    const saved = gbpPostService.savePost(req.body, req.params.id);
+    res.json(saved);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij opslaan Google Post: ' + err.message });
+  }
+});
+
+app.post('/api/projects/:id/gbp/posts/:postId/publish', async (req, res) => {
+  try {
+    const result = await gbpPostService.publishPostToGbp(req.params.postId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij publiceren naar Google: ' + err.message });
+  }
+});
+
+app.delete('/api/projects/:id/gbp/posts/:postId', (req, res) => {
+  try {
+    gbpPostService.deletePost(req.params.postId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Fout bij verwijderen Google Post: ' + err.message });
   }
 });
 
@@ -918,6 +966,7 @@ app.get('/api/keywords', async (req, res) => {
     const keywords = db.prepare(`
       SELECT 
         k.id, k.keyword, k.target_url, k.region, k.language, k.created_at,
+        COALESCE(r.difficulty, k.difficulty, 50) AS difficulty,
         r.position, r.previous_position, r.search_volume, r.serp_features, r.url_found, r.checked_at
       FROM keywords k
       LEFT JOIN keyword_rankings r ON k.id = r.keyword_id
@@ -953,6 +1002,7 @@ app.get('/api/keywords', async (req, res) => {
 
       return {
         ...kw,
+        difficulty: kw.difficulty ? Math.round(kw.difficulty) : 50,
         impressions,
         clicks,
         ctr,
@@ -974,7 +1024,10 @@ app.post('/api/keywords', async (req, res) => {
     const { projectId = 1, keyword, targetUrl, region = 'Nederland', language = 'nl' } = req.body;
     if (!keyword) return res.status(400).json({ error: 'Zoekwoord is verplicht' });
 
-    const info = db.prepare('INSERT INTO keywords (project_id, keyword, target_url, region, language) VALUES (?, ?, ?, ?, ?)').run(projectId, keyword, targetUrl, region, language);
+    const { calculateKeywordDifficulty } = require('./services/rankTracker');
+    const initKD = calculateKeywordDifficulty ? calculateKeywordDifficulty(keyword) : 50;
+
+    const info = db.prepare('INSERT INTO keywords (project_id, keyword, target_url, region, language, difficulty) VALUES (?, ?, ?, ?, ?, ?)').run(projectId, keyword, targetUrl, region, language, initKD);
     const keywordId = info.lastInsertRowid;
 
     // Direct een echte live check uitvoeren; zonder API key blijft de positie
@@ -993,6 +1046,7 @@ app.post('/api/keywords', async (req, res) => {
       target_url: targetUrl,
       region,
       language,
+      difficulty: liveResult?.difficulty || initKD,
       position: liveResult ? liveResult.position : null,
       checked: Boolean(liveResult)
     });
@@ -1049,6 +1103,48 @@ app.get('/api/projects/:id/rankings-history', (req, res) => {
   }
 });
 
+app.put('/api/keywords/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { keyword, targetUrl, region = 'Nederland', language = 'nl' } = req.body;
+    if (!keyword || !keyword.trim()) {
+      return res.status(400).json({ error: 'Zoekwoord mag niet leeg zijn' });
+    }
+
+    const cleanKw = keyword.trim();
+    const { calculateKeywordDifficulty } = require('./services/rankTracker');
+    const kd = calculateKeywordDifficulty ? calculateKeywordDifficulty(cleanKw) : 50;
+
+    db.prepare(`
+      UPDATE keywords 
+      SET keyword = ?, target_url = ?, region = ?, language = ?, difficulty = ?
+      WHERE id = ?
+    `).run(cleanKw, targetUrl ? targetUrl.trim() : null, region, language, kd, id);
+
+    // Also update KD in latest ranking row if exists
+    db.prepare(`
+      UPDATE keyword_rankings 
+      SET difficulty = ? 
+      WHERE keyword_id = ? AND id = (SELECT id FROM keyword_rankings WHERE keyword_id = ? ORDER BY checked_at DESC LIMIT 1)
+    `).run(kd, id, id);
+
+    const updatedKw = db.prepare(`
+      SELECT 
+        k.id, k.keyword, k.target_url, k.region, k.language, k.created_at,
+        COALESCE(r.difficulty, k.difficulty, 50) AS difficulty,
+        r.position, r.previous_position, r.search_volume, r.serp_features, r.url_found, r.checked_at
+      FROM keywords k
+      LEFT JOIN keyword_rankings r ON k.id = r.keyword_id
+      WHERE k.id = ?
+      AND (r.id IS NULL OR r.id = (SELECT id FROM keyword_rankings WHERE keyword_id = k.id ORDER BY checked_at DESC LIMIT 1))
+    `).get(id);
+
+    res.json({ success: true, keyword: updatedKw });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/keywords/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM keywords WHERE id = ?').run(req.params.id);
@@ -1086,10 +1182,41 @@ app.post('/api/keywords/delete-brand', (req, res) => {
 
 app.post('/api/keywords/check-rankings', async (req, res) => {
   try {
-    const { projectId = 1 } = req.body;
-    const updatedRankings = await checkKeywordRankings(projectId);
+    const { projectId = 1, keywordIds } = req.body;
+    const updatedRankings = await checkKeywordRankings(projectId, keywordIds);
     captureRankingSnapshots(projectId);
     res.json({ success: true, updatedCount: updatedRankings.length, rankings: updatedRankings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/keywords/check-batch', async (req, res) => {
+  try {
+    const { projectId = 1, keywordIds = [] } = req.body;
+    if (!Array.isArray(keywordIds) || keywordIds.length === 0) {
+      return res.status(400).json({ error: 'Geen keywordIds meegegeven' });
+    }
+    const updatedRankings = await checkKeywordRankings(projectId, keywordIds);
+    res.json({ success: true, updatedCount: updatedRankings.length, rankings: updatedRankings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/keywords/:id/check', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const kw = db.prepare('SELECT * FROM keywords WHERE id = ?').get(id);
+    if (!kw) return res.status(404).json({ error: 'Zoekwoord niet gevonden' });
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(kw.project_id);
+    const targetDomain = project ? project.domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '') : '';
+    const serpApiKey = getSerpApiKey();
+    if (!serpApiKey) throw new Error('Geen SERP API key geconfigureerd');
+
+    const result = await checkSingleKeyword(kw, targetDomain, serpApiKey);
+    res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1301,98 +1428,9 @@ app.post('/api/reports/send-email', async (req, res) => {
 // ----------------------------------------------------
 // Geautomatiseerde ranking check & E-mail rapportage (Dagelijks of Wekelijks)
 // ----------------------------------------------------
+const { runScheduledRankChecks, captureDailySnapshots } = require('./services/scheduledTaskService');
+
 const AUTO_CHECK_INTERVAL_MS = 60 * 60 * 1000; // elk uur kijken of er iets te doen is
-
-/**
- * Dagelijkse snapshots voor de externe bronnen. Draait mee met de bestaande
- * uurlijkse taak, zodat de historie ook doorgroeit als niemand het dashboard
- * opent. De insights-build schrijft zelf al weg; deze aanroep is de vangnet-
- * variant voor projecten die niemand bekijkt.
- */
-async function captureDailySnapshots() {
-  const projects = db.prepare('SELECT id FROM projects').all();
-  for (const project of projects) {
-    try {
-      await buildInsightsReport(project.id, { days: 28, refresh: true });
-    } catch (err) {
-      console.error(`[snapshots] project ${project.id} overgeslagen: ${err.message}`);
-    }
-  }
-}
-
-async function runScheduledRankChecks() {
-  try {
-    const enabledRow = db.prepare("SELECT value FROM settings WHERE key = 'auto_check_enabled'").get();
-    if (!enabledRow || enabledRow.value !== '1') return;
-
-    const frequencyRow = db.prepare("SELECT value FROM settings WHERE key = 'auto_check_frequency'").get();
-    const frequency = frequencyRow ? frequencyRow.value : 'daily'; // 'daily' of 'weekly'
-    const minAgeHours = frequency === 'weekly' ? (7 * 24 - 2) : 22; // 7 dagen (166u) of 22u
-
-    if (!getSerpApiKey()) return;
-
-    const recipientsRow = db.prepare("SELECT value FROM settings WHERE key = 'report_email_recipients'").get();
-    const recipients = recipientsRow ? recipientsRow.value.trim() : '';
-
-    const projects = db.prepare('SELECT * FROM projects').all();
-    for (const project of projects) {
-      const lastCheck = db.prepare(`
-        SELECT MAX(r.checked_at) AS last
-        FROM keyword_rankings r
-        JOIN keywords k ON k.id = r.keyword_id
-        WHERE k.project_id = ?
-      `).get(project.id);
-
-      const keywordCount = db.prepare('SELECT COUNT(*) AS n FROM keywords WHERE project_id = ?').get(project.id).n;
-      if (keywordCount === 0) continue;
-
-      const ageHours = lastCheck && lastCheck.last
-        ? (Date.now() - new Date(lastCheck.last + 'Z').getTime()) / 3600000
-        : Infinity;
-
-      if (ageHours >= minAgeHours) {
-        console.log(`[auto-check] ${frequency === 'weekly' ? 'Wekelijkse' : 'Dagelijkse'} ranking check voor project ${project.id} (${project.name})...`);
-        try {
-          const results = await checkKeywordRankings(project.id);
-          console.log(`[auto-check] ${results.length} zoekwoorden gecheckt voor ${project.name}`);
-
-          // Als er e-mailadressen zijn ingesteld, stuur automatisch het rapport via Resend
-          if (recipients) {
-            console.log(`[auto-report] Versturen rapport e-mail naar: ${recipients}...`);
-            const keywords = db.prepare(`
-              SELECT k.id, k.keyword, k.target_url, k.region, r.position, r.previous_position
-              FROM keywords k
-              LEFT JOIN keyword_rankings r ON k.id = r.keyword_id
-              WHERE k.project_id = ?
-              AND (r.id IS NULL OR r.id = (SELECT id FROM keyword_rankings WHERE keyword_id = k.id ORDER BY checked_at DESC LIMIT 1))
-            `).all(project.id);
-
-            const rankStats = {
-              totalKeywords: keywords.length,
-              top3: keywords.filter(k => k.position > 0 && k.position <= 3).length,
-              top10: keywords.filter(k => k.position > 0 && k.position <= 10).length,
-              improved: keywords.filter(k => k.position > 0 && k.position < k.previous_position).length,
-              declined: keywords.filter(k => k.position > 0 && k.position > k.previous_position).length
-            };
-
-            const htmlContent = buildReportHtml({ project, rankStats, keywords });
-            await sendReportEmail({
-              to: recipients,
-              subject: `[${frequency === 'weekly' ? 'Wekelijks' : 'Dagelijks'}] SEO Rapport ${project.name}`,
-              html: htmlContent
-            });
-            console.log(`[auto-report] E-mail succesvol verzonden naar ${recipients}`);
-          }
-          captureRankingSnapshots(project.id);
-        } catch (err) {
-          console.error(`[auto-check] Mislukt voor project ${project.id}:`, err.message);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[auto-check] Fout:', err.message);
-  }
-}
 
 async function runHourlyTasks() {
   await runScheduledRankChecks();

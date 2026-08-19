@@ -4,9 +4,16 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
-      "includeFiles": "seo_database.db"
+      "includeFiles": "seo_database.db",
+      "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/rank-check",
+      "schedule": "0 7 * * 1"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

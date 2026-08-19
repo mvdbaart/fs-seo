@@ -261,9 +261,26 @@ function initDb() {
       group_id INTEGER NOT NULL,
       headlines_json TEXT NOT NULL,
       descriptions_json TEXT NOT NULL,
-      final_url TEXT NOT NULL,
+      final_url TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (group_id) REFERENCES google_ads_groups(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS gbp_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER,
+      title TEXT,
+      summary TEXT NOT NULL,
+      topic_type TEXT DEFAULT 'STANDARD',
+      cta_type TEXT DEFAULT 'LEARN_MORE',
+      cta_url TEXT,
+      media_url TEXT,
+      status TEXT DEFAULT 'draft',
+      google_post_id TEXT,
+      error_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      published_at DATETIME,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS google_ads_negatives (

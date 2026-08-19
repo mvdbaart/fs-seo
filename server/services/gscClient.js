@@ -17,6 +17,8 @@ const db = require('../db');
 const GSC_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const API_BASE = 'https://www.googleapis.com/webmasters/v3';
 
+const path = require('path');
+
 let cachedToken = null;
 let cachedTokenExpiry = 0;
 
@@ -29,9 +31,18 @@ function loadCredentials() {
   if (settingsRow && settingsRow.value) candidates.push(settingsRow.value);
 
   for (const candidate of candidates) {
-    const trimmed = candidate.trim();
+    const trimmed = String(candidate).trim();
+    if (!trimmed) continue;
     try {
-      const raw = trimmed.startsWith('{') ? trimmed : fs.readFileSync(trimmed, 'utf8');
+      let raw;
+      if (trimmed.startsWith('{')) {
+        raw = trimmed;
+      } else {
+        const filePath = path.isAbsolute(trimmed)
+          ? trimmed
+          : path.resolve(__dirname, '../../', trimmed);
+        raw = fs.readFileSync(filePath, 'utf8');
+      }
       const parsed = JSON.parse(raw);
       if (parsed.client_email && parsed.private_key) return parsed;
     } catch (e) {

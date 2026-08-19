@@ -25,8 +25,8 @@ const REQUIRED_KEYS = [
 
 const SETTING_TO_ENV = {
   google_ads_developer_token: ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_DEV_TEST_TOKEN'],
-  google_ads_client_id: ['GOOGLE_ADS_CLIENT_ID'],
-  google_ads_client_secret: ['GOOGLE_ADS_CLIENT_SECRET'],
+  google_ads_client_id: ['GOOGLE_ADS_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_ID'],
+  google_ads_client_secret: ['GOOGLE_ADS_CLIENT_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET'],
   google_ads_refresh_token: ['GOOGLE_ADS_REFRESH_TOKEN'],
   google_ads_customer_id: ['GOOGLE_ADS_CUSTOMER_ID'],
   google_ads_login_customer_id: ['GOOGLE_ADS_LOGIN_CUSTOMER_ID']
@@ -38,7 +38,16 @@ function getCredential(key) {
     if (process.env[envName]) return String(process.env[envName]).trim();
   }
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row && row.value ? String(row.value).trim() : '';
+  if (row && row.value) return String(row.value).trim();
+  if (key === 'google_ads_client_id') {
+    const r = db.prepare('SELECT value FROM settings WHERE key = ?').get('google_oauth_client_id');
+    if (r && r.value) return String(r.value).trim();
+  }
+  if (key === 'google_ads_client_secret') {
+    const r = db.prepare('SELECT value FROM settings WHERE key = ?').get('google_oauth_client_secret');
+    if (r && r.value) return String(r.value).trim();
+  }
+  return '';
 }
 
 function loadCredentials() {

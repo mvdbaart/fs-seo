@@ -21,7 +21,10 @@ import {
   History,
   Tag,
   Eye,
-  Minus
+  Minus,
+  Edit2,
+  X,
+  Clock
 } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
@@ -108,6 +111,59 @@ export default function RankTrackerView({ projectId, activeProject, initialFilte
     }
   };
 
+  const [progress, setProgress] = useState({ current: 0, total: 0, active: false });
+  const [singleCheckingId, setSingleCheckingId] = useState(null);
+  const cancelCheckRef = React.useRef(false);
+
+  // Keyword editing state
+  const [editingId, setEditingId] = useState(null);
+  const [editKeyword, setEditKeyword] = useState('');
+  const [editRegion, setEditRegion] = useState('Geldrop');
+  const [editTargetUrl, setEditTargetUrl] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const startEdit = (kw) => {
+    setEditingId(kw.id);
+    setEditKeyword(kw.keyword);
+    setEditRegion(kw.region || 'Geldrop');
+    setEditTargetUrl(kw.target_url || '');
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditKeyword('');
+    setEditRegion('Geldrop');
+    setEditTargetUrl('');
+  };
+
+  const saveEdit = async (id) => {
+    if (!editKeyword.trim()) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/keywords/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword: editKeyword.trim(),
+          region: editRegion,
+          targetUrl: editTargetUrl.trim()
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setKeywords(prev => prev.map(k => k.id === id ? { ...k, ...data.keyword } : k));
+        cancelEdit();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Opslaan mislukt');
+      }
+    } catch (err) {
+      alert('Fout bij opslaan van zoekwoord: ' + err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   useEffect(() => {
     fetchKeywords();
   }, [projectId]);
@@ -160,23 +216,101 @@ export default function RankTrackerView({ projectId, activeProject, initialFilte
     }
   };
 
+  // Chunked batch ranking checks (5 items per batch) to prevent timeouts
   const handleCheckRankings = async () => {
+    const targetKwList = filteredKeywords.length > 0 ? filteredKeywords : keywords;
+    if (targetKwList.length === 0) return;
+
+    cancelCheckRef.current = false;
     setChecking(true);
+    setProgress({ current: 0, total: targetKwList.length, active: true });
+
+    const batchSize = 5;
+    const ids = targetKwList.map(k => k.id);
+
     try {
-      const res = await fetch('/api/keywords/check-rankings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: projectId || 1 })
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || 'Ranking check mislukt');
+      for (let i = 0; i < ids.length; i += batchSize) {
+        if (cancelCheckRef.current) break;
+
+        const batchIds = ids.slice(i, i + batchSize);
+        const res = await fetch('/api/keywords/check-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: projectId || 1, keywordIds: batchIds })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const updatedMap = new Map((data.rankings || []).map(r => [r.keywordId, r]));
+
+          setKeywords(prev => prev.map(k => {
+            if (updatedMap.has(k.id)) {
+              const u = updatedMap.get(k.id);
+              return {
+                ...k,
+                position: u.position,
+                previous_position: u.previousPosition,
+                url_found: u.urlFound,
+                difficulty: u.difficulty || k.difficulty,
+                serp_features: u.serpFeatures || k.serp_features,
+                checked_at: new Date().toISOString()
+              };
+            }
+            return k;
+          }));
+        }
+
+        const processed = Math.min(i + batchSize, ids.length);
+        setProgress({ current: processed, total: ids.length, active: true });
+        await new Promise(r => setTimeout(r, 150));
       }
-      fetchKeywords();
     } catch (err) {
       alert('Fout bij hercontroleren van rankings: ' + err.message);
     } finally {
       setChecking(false);
+      setProgress(p => ({ ...p, active: false }));
+    }
+  };
+
+  const handleCancelCheck = () => {
+    cancelCheckRef.current = true;
+    setChecking(false);
+    setProgress(p => ({ ...p, active: false }));
+  };
+
+  const handleCheckSingleKeyword = async (kwId) => {
+    setSingleCheckingId(kwId);
+    try {
+      const res = await fetch(`/api/keywords/${kwId}/check`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.result) {
+          const u = data.result;
+          setKeywords(prev => prev.map(k => {
+            if (k.id === kwId) {
+              return {
+                ...k,
+                position: u.position,
+                previous_position: u.previousPosition,
+                url_found: u.urlFound,
+                difficulty: u.difficulty || k.difficulty,
+                serp_features: u.serpFeatures || k.serp_features,
+                checked_at: new Date().toISOString()
+              };
+            }
+            return k;
+          }));
+        }
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Check mislukt');
+      }
+    } catch (err) {
+      alert('Fout bij checken van zoekwoord: ' + err.message);
+    } finally {
+      setSingleCheckingId(null);
     }
   };
 
@@ -201,6 +335,7 @@ export default function RankTrackerView({ projectId, activeProject, initialFilte
 
     if (activeFilter === 'top3') return kw.position > 0 && kw.position <= 3;
     if (activeFilter === 'top10') return kw.position > 0 && kw.position <= 10;
+    if (activeFilter === 'kd_easy') return kw.difficulty <= 30;
     if (activeFilter === 'improved') return kw.position > 0 && kw.position < kw.previous_position;
     if (activeFilter === 'declined') return kw.position > 0 && kw.position > kw.previous_position;
     if (activeFilter === 'unranked') return kw.position === 0;
@@ -219,7 +354,7 @@ export default function RankTrackerView({ projectId, activeProject, initialFilte
     if (sortField === 'position' || sortField === 'previous_position') {
       if (valA === 0 || valA === null || valA === undefined) valA = 999;
       if (valB === 0 || valB === null || valB === undefined) valB = 999;
-    } else if (sortField === 'search_volume' || sortField === 'impressions' || sortField === 'trend') {
+    } else if (sortField === 'search_volume' || sortField === 'impressions' || sortField === 'trend' || sortField === 'difficulty') {
       if (valA === null || valA === undefined) valA = -999;
       if (valB === null || valB === undefined) valB = -999;
     } else {
@@ -263,6 +398,62 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const latestCheckedAt = React.useMemo(() => {
+    const dates = keywords
+      .map(k => k.checked_at)
+      .filter(Boolean);
+    if (dates.length === 0) return null;
+    dates.sort((a, b) => {
+      const timeA = new Date(a.includes('T') || a.endsWith('Z') ? a : a.replace(' ', 'T') + 'Z').getTime();
+      const timeB = new Date(b.includes('T') || b.endsWith('Z') ? b : b.replace(' ', 'T') + 'Z').getTime();
+      return timeB - timeA;
+    });
+    return dates[0];
+  }, [keywords]);
+
+  const formatLastChecked = (str) => {
+    if (!str) return null;
+    try {
+      const d = new Date(str.includes('T') || str.endsWith('Z') ? str : str.replace(' ', 'T') + 'Z');
+      if (isNaN(d.getTime())) return str;
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const isYesterday = d.toDateString() === yesterday.toDateString();
+      const timeStr = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
+      if (isToday) {
+        return `Vandaag om ${timeStr}`;
+      } else if (isYesterday) {
+        return `Gisteren om ${timeStr}`;
+      } else {
+        const dateStr = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+        return `${dateStr} om ${timeStr}`;
+      }
+    } catch {
+      return str;
+    }
+  };
+
+  const formatFullDateTime = (str) => {
+    if (!str) return '';
+    try {
+      const d = new Date(str.includes('T') || str.endsWith('Z') ? str : str.replace(' ', 'T') + 'Z');
+      if (isNaN(d.getTime())) return str;
+      return d.toLocaleString('nl-NL', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch {
+      return str;
+    }
+  };
+
   return (
     <div>
       {/* Header & Add Keyword Form */}
@@ -272,7 +463,27 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
             <Search size={18} color="var(--primary)" /> Live Dutch Keyword Rank Tracker (Google.nl vanaf Geldrop / Nuenen)
           </span>
 
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {latestCheckedAt && (
+              <span 
+                style={{ 
+                  fontSize: '0.8rem', 
+                  color: 'var(--text-muted)', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '5px',
+                  background: 'var(--bg-card)',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color, #e2e8f0)',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                }}
+                title={`Laatste live Google ranking check: ${formatFullDateTime(latestCheckedAt)}`}
+              >
+                <Clock size={13} color="var(--primary)" />
+                <span>Laatste check: <strong style={{ color: 'var(--text-main)', fontWeight: 600 }}>{formatLastChecked(latestCheckedAt)}</strong></span>
+              </span>
+            )}
             <button className="btn btn-primary" onClick={handleCheckRankings} disabled={checking} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
               {checking ? (
                 <>
@@ -321,6 +532,31 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
             <Plus size={15} /> Zoekwoord Toevoegen
           </button>
         </form>
+
+        {/* Live Batch Progress Indicator */}
+        {progress.active && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', fontSize: '0.85rem' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--primary)' }}>
+                <RefreshCw size={14} className="spin" style={{ animation: 'spin 1s linear infinite' }} />
+                Live rankings controleren op Google.nl ({progress.current}/{progress.total} zoekwoorden - {Math.round((progress.current / (progress.total || 1)) * 100)}%)
+              </span>
+              <button className="btn btn-secondary btn-xs" onClick={handleCancelCheck} style={{ color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                Annuleren
+              </button>
+            </div>
+            <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  width: `${Math.round((progress.current / (progress.total || 1)) * 100)}%`, 
+                  height: '100%', 
+                  backgroundColor: 'var(--primary)', 
+                  transition: 'width 0.3s ease' 
+                }} 
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KPI Cards */}
@@ -363,6 +599,9 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           </button>
           <button className={`tab-btn ${activeFilter === 'top10' ? 'active' : ''}`} onClick={() => setActiveFilter('top10')} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
             Top 10 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position > 0 && k.position <= 10).length})
+          </button>
+          <button className={`tab-btn ${activeFilter === 'kd_easy' ? 'active' : ''}`} onClick={() => setActiveFilter('kd_easy')} style={{ padding: '5px 10px', fontSize: '0.8rem' }} title="Keyword Difficulty <= 30 (Makkelijk / Snelle Kansen)">
+            KD Makkelijk ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.difficulty <= 30).length})
           </button>
           <button className={`tab-btn ${activeFilter === 'unranked' ? 'active' : ''}`} onClick={() => setActiveFilter('unranked')} style={{ padding: '5px 10px', fontSize: '0.8rem' }}>
             Niet in Top 100 ({keywords.filter(k => (!hideBrandKeywords || !isBrand(k.keyword)) && k.position === 0).length})
@@ -434,6 +673,9 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
               <th onClick={() => handleSort('region')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Regio {renderSortIcon('region')}</div>
               </th>
+              <th onClick={() => handleSort('difficulty')} style={{ cursor: 'pointer' }} title="Keyword Difficulty (0-100): Makkelijk (0-30), Gemiddeld (31-60), Moeilijk (61-100)">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>KW Difficulty (KD) {renderSortIcon('difficulty')}</div>
+              </th>
               <th onClick={() => handleSort('impressions')} style={{ cursor: 'pointer' }} title="Vertoningen in Google Search Console over de afgelopen 28 dagen">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Zoekvolume (GSC) {renderSortIcon('impressions')}</div>
               </th>
@@ -455,7 +697,7 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
           <tbody>
             {sortedKeywords.length === 0 ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                <td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                   Geen zoekwoorden gevonden voor de huidige filter/zoekopdracht.
                 </td>
               </tr>
@@ -469,22 +711,74 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                 }));
                 return (
                   <React.Fragment key={kw.id}>
-                  <tr>
-                    <td style={{ fontWeight: 600, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => toggleHistory(kw.id)}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <History size={13} color={expandedId === kw.id ? 'var(--primary)' : 'var(--text-dim)'} />
-                        {kw.keyword}
-                        {isBrand(kw.keyword) && (
-                          <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 5px', opacity: 0.85 }}>
-                            Merknaam
+                  <tr style={editingId === kw.id ? { backgroundColor: 'rgba(37, 99, 235, 0.05)' } : {}}>
+                    <td>
+                      {editingId === kw.id ? (
+                        <input 
+                          type="text"
+                          className="input-field"
+                          style={{ padding: '4px 8px', fontSize: '0.85rem', width: '100%', minWidth: '180px' }}
+                          value={editKeyword}
+                          onChange={(e) => setEditKeyword(e.target.value)}
+                          autoFocus
+                        />
+                      ) : (
+                        <div style={{ fontWeight: 600, color: 'var(--text-main)', cursor: 'pointer' }} onClick={() => toggleHistory(kw.id)}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <History size={13} color={expandedId === kw.id ? 'var(--primary)' : 'var(--text-dim)'} />
+                            {kw.keyword}
+                            {isBrand(kw.keyword) && (
+                              <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 5px', opacity: 0.85 }}>
+                                Merknaam
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
+                        </div>
+                      )}
                     </td>
                     <td>
-                      <span className="badge badge-info" style={{ gap: '4px' }}>
-                        <MapPin size={10} /> {kw.region || 'Geldrop'}
-                      </span>
+                      {editingId === kw.id ? (
+                        <select
+                          className="input-field"
+                          style={{ padding: '4px 6px', fontSize: '0.8rem', width: '110px' }}
+                          value={editRegion}
+                          onChange={(e) => setEditRegion(e.target.value)}
+                        >
+                          <option value="Geldrop">Geldrop</option>
+                          <option value="Nuenen">Nuenen</option>
+                          <option value="Eindhoven">Eindhoven</option>
+                          <option value="Helmond">Helmond</option>
+                          <option value="Brabant">Brabant</option>
+                          <option value="Best">Best</option>
+                          <option value="Nederland">Nederland</option>
+                        </select>
+                      ) : (
+                        <span className="badge badge-info" style={{ gap: '4px' }}>
+                          <MapPin size={10} /> {kw.region || 'Geldrop'}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {kw.difficulty !== undefined && kw.difficulty !== null ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            backgroundColor: kw.difficulty <= 30 ? 'rgba(16, 185, 129, 0.15)' : kw.difficulty <= 60 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: kw.difficulty <= 30 ? '#10b981' : kw.difficulty <= 60 ? '#f59e0b' : '#ef4444',
+                            border: `1px solid ${kw.difficulty <= 30 ? 'rgba(16, 185, 129, 0.3)' : kw.difficulty <= 60 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                          }}
+                          title={`KD ${kw.difficulty}/100: ${kw.difficulty <= 30 ? 'Makkelijk om te ranken' : kw.difficulty <= 60 ? 'Gemiddelde concurrentie' : 'Hoge concurrentie'}`}
+                        >
+                          {kw.difficulty} · {kw.difficulty <= 30 ? 'Makkelijk' : kw.difficulty <= 60 ? 'Gemiddeld' : 'Moeilijk'}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>—</span>
+                      )}
                     </td>
                     <td>
                       {kw.impressions > 0 ? (
@@ -550,35 +844,82 @@ ${keywords.map((k, i) => `${i + 1}. Zoekwoord: "${k.keyword}" | Regio: ${k.regio
                       )}
                     </td>
                     <td style={{ fontSize: '0.82rem', color: 'var(--primary)' }}>
-                      {kw.url_found ? (
+                      {editingId === kw.id ? (
+                        <input 
+                          type="text"
+                          className="input-field"
+                          style={{ padding: '4px 8px', fontSize: '0.8rem', width: '100%', minWidth: '140px' }}
+                          placeholder="Doel URL (optioneel)"
+                          value={editTargetUrl}
+                          onChange={(e) => setEditTargetUrl(e.target.value)}
+                        />
+                      ) : kw.url_found ? (
                         <a href={kw.url_found} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>{kw.url_found}</a>
                       ) : (
                         <span style={{ color: 'var(--text-dim)' }}>Geen URL gevonden</span>
                       )}
                     </td>
-                    {/* display:flex hoort op een wrapper, niet op de <td> zelf —
-                        anders doet de cel niet meer mee aan de kolombreedtes. */}
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                      <button
-                        className="btn btn-secondary btn-xs"
-                        title="Optimaliseer met AI Content Generator"
-                        onClick={() => {
-                          const kwUrl = kw.url_found || kw.target_url || (activeProject ? activeProject.domain : '');
-                          window.dispatchEvent(new CustomEvent('open-content-optimizer', { detail: { keyword: kw.keyword, url: kwUrl } }));
-                        }}
-                      >
-                        <Sparkles size={12} color="var(--primary)" /> AI Brief
-                      </button>
-                      <button className="btn btn-danger btn-xs" onClick={() => handleDeleteKeyword(kw.id)}>
-                        <Trash2 size={12} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {editingId === kw.id ? (
+                        <>
+                          <button
+                            className="btn btn-primary btn-xs"
+                            title="Opslaan"
+                            disabled={savingEdit}
+                            onClick={() => saveEdit(kw.id)}
+                            style={{ padding: '4px 8px' }}
+                          >
+                            <Check size={13} /> Opslaan
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-xs"
+                            title="Annuleren"
+                            disabled={savingEdit}
+                            onClick={cancelEdit}
+                            style={{ padding: '4px 8px' }}
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="btn btn-secondary btn-xs"
+                            title="Zoekwoord bewerken"
+                            onClick={() => startEdit(kw)}
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-xs"
+                            title="Controleer dit zoekwoord direct live op Google.nl"
+                            disabled={singleCheckingId === kw.id}
+                            onClick={() => handleCheckSingleKeyword(kw.id)}
+                          >
+                            <RefreshCw size={12} className={singleCheckingId === kw.id ? 'spin' : ''} style={{ animation: singleCheckingId === kw.id ? 'spin 1s linear infinite' : 'none' }} />
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-xs"
+                            title="Optimaliseer met AI Content Generator"
+                            onClick={() => {
+                              const kwUrl = kw.url_found || kw.target_url || (activeProject ? activeProject.domain : '');
+                              window.dispatchEvent(new CustomEvent('open-content-optimizer', { detail: { keyword: kw.keyword, url: kwUrl } }));
+                            }}
+                          >
+                            <Sparkles size={12} color="var(--primary)" /> AI Brief
+                          </button>
+                          <button className="btn btn-danger btn-xs" onClick={() => handleDeleteKeyword(kw.id)}>
+                            <Trash2 size={12} />
+                          </button>
+                        </>
+                      )}
                       </div>
                     </td>
                   </tr>
                   {expandedId === kw.id && (
                     <tr>
-                      <td colSpan="8" style={{ background: 'var(--bg-main)', padding: '16px 24px' }}>
+                      <td colSpan="9" style={{ background: 'var(--bg-main)', padding: '16px 24px' }}>
                         {chartData.filter(d => d.position !== null).length < 2 ? (
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '12px' }}>
                             {history.length === 0
