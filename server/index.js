@@ -28,6 +28,7 @@ const {
   fetchCourseCategoriesFromSupabase 
 } = require('./services/supabaseService');
 const { generateAiContent } = require('./services/aiGenerator');
+const campaignWizardService = require('./services/campaignWizardService');
 const authRouter = require('./auth/routes');
 const { requireAuth } = require('./auth/middleware');
 const cronRouter = require('./cronRoutes');
@@ -162,6 +163,97 @@ app.post('/api/ai/generate', async (req, res) => {
     const { promptText, provider = 'auto', style = 'default' } = req.body;
     if (!promptText) return res.status(400).json({ error: 'Geen prompttekst opgegeven' });
     const result = await generateAiContent({ promptText, provider, style });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Campagne Wizard Endpoints
+// ----------------------------------------------------
+app.get('/api/campaigns/presets', (req, res) => {
+  res.json({
+    personas: campaignWizardService.AGENT_PERSONAS,
+    models: campaignWizardService.SUPPORTED_MODELS
+  });
+});
+
+app.get('/api/campaigns', (req, res) => {
+  try {
+    const { projectId } = req.query;
+    const campaigns = campaignWizardService.getAllCampaigns(projectId);
+    res.json({ success: true, campaigns });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/campaigns/:id', (req, res) => {
+  try {
+    const campaign = campaignWizardService.getCampaignById(req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Campagne niet gevonden' });
+    res.json({ success: true, campaign });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/campaigns', (req, res) => {
+  try {
+    const { id, projectId, title, targetUrl, briefingText, targetAudience, channels, generatedContent, status } = req.body;
+    if (!title) return res.status(400).json({ error: 'Campagne titel is verplicht' });
+    const saved = campaignWizardService.saveCampaign({ id, projectId, title, targetUrl, briefingText, targetAudience, channels, generatedContent, status });
+    res.json({ success: true, campaign: saved });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/campaigns/:id', (req, res) => {
+  try {
+    campaignWizardService.deleteCampaign(req.params.id);
+    res.json({ success: true, message: 'Campagne verwijderd' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/campaigns/generate-channel', async (req, res) => {
+  try {
+    const { campaignTitle, briefingText, targetLandingUrl, targetAudience, channelKey, agentRoleId, modelId, customInstructions } = req.body;
+    if (!briefingText) return res.status(400).json({ error: 'Briefing / context is verplicht' });
+    if (!channelKey) return res.status(400).json({ error: 'Kanaal key is verplicht' });
+
+    const result = await campaignWizardService.generateCampaignChannel({
+      campaignTitle: campaignTitle || 'Multi-Channel Campagne',
+      briefingText,
+      targetLandingUrl,
+      targetAudience,
+      channelKey,
+      agentRoleId,
+      modelId,
+      customInstructions
+    });
+
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/campaigns/push-blog-supabase', async (req, res) => {
+  try {
+    const { title, slug, content, metaDescription, targetKeywords } = req.body;
+    if (!title || !content) return res.status(400).json({ error: 'Titel en inhoud zijn verplicht' });
+    const result = await pushBlogPostToSupabase({
+      title,
+      slug: slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      metaDescription: metaDescription || title,
+      content,
+      targetKeywords: targetKeywords || [],
+      status: 'draft'
+    });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -446,7 +538,8 @@ const { getGa4ClarityAnalytics } = require('./services/ga4ClarityService');
 app.get('/api/projects/:id/ga4-clarity', async (req, res) => {
   try {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 28, 7), 90);
-    const data = await getGa4ClarityAnalytics(req.params.id, days);
+    const excludedPaths = req.query.excluded_paths !== undefined ? req.query.excluded_paths : undefined;
+    const data = await getGa4ClarityAnalytics(req.params.id, days, excludedPaths);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Fout bij ophalen GA4/Clarity data: ' + err.message });
@@ -1313,6 +1406,8 @@ const ALLOWED_SETTING_KEYS = new Set([
   'business_address',
   'business_phone',
   'ga4_property_id',
+  'ga4_excluded_paths',
+  'excluded_paths',
   'clarity_project_id',
   'clarity_api_key',
   'github_token',

@@ -310,8 +310,20 @@ function initDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_metric_snapshots_key
       ON metric_snapshots(project_id, source, metric, day);
 
-    CREATE INDEX IF NOT EXISTS idx_metric_snapshots_lookup
-      ON metric_snapshots(project_id, source, metric, day DESC);
+    CREATE TABLE IF NOT EXISTS campaign_wizards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER,
+      title TEXT NOT NULL,
+      target_url TEXT,
+      briefing_text TEXT,
+      target_audience TEXT,
+      channels_json TEXT,
+      generated_content_json TEXT,
+      status TEXT DEFAULT 'draft',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
   `);
 
 

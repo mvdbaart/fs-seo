@@ -21,9 +21,9 @@ import {
   ChevronRight,
   Wrench,
   TrendingUp,
-  Activity,
   Layers,
-  Megaphone
+  Megaphone,
+  Wand2
 } from 'lucide-react';
 
 import DashboardView from './components/DashboardView';
@@ -43,6 +43,7 @@ import ContentOptimizerView from './components/ContentOptimizerView';
 import Ga4ClarityView from './components/Ga4ClarityView';
 import PillarClusterView from './components/PillarClusterView';
 import GoogleAdsStudio from './components/GoogleAdsStudio';
+import CampaignWizardView from './components/CampaignWizardView';
 import LoginView from './components/LoginView';
 
 export default function App() {
@@ -57,6 +58,7 @@ export default function App() {
 
   // Group collapsible state
   const [openGroups, setOpenGroups] = useState({
+    marketing: true,
     analysis: true,
     tools: true
   });
@@ -257,6 +259,24 @@ export default function App() {
             <LayoutDashboard className="nav-item-icon" /> Overzicht
           </li>
 
+          {/* Group: Marketing & Campagnes */}
+          <li className="nav-group-header" onClick={() => toggleGroup('marketing')}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Megaphone size={16} /> <span>Marketing & Campagnes</span>
+            </div>
+            {openGroups.marketing ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </li>
+          {openGroups.marketing && (
+            <div className="nav-sub-list">
+              <li className={`nav-item ${activeTab === 'campagnewizard' ? 'active' : ''}`} onClick={() => setActiveTab('campagnewizard')}>
+                <Wand2 className="nav-item-icon" /> Campagne Wizard
+              </li>
+              <li className={`nav-item ${activeTab === 'googleads' ? 'active' : ''}`} onClick={() => setActiveTab('googleads')}>
+                <Megaphone className="nav-item-icon" /> Google Ads Studio
+              </li>
+            </div>
+          )}
+
           {/* Group 1: Rankings & Prestaties */}
           <li className="nav-group-header" onClick={() => toggleGroup('analysis')}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -296,9 +316,6 @@ export default function App() {
           </li>
           {openGroups.tools && (
             <div className="nav-sub-list">
-              <li className={`nav-item ${activeTab === 'googleads' ? 'active' : ''}`} onClick={() => setActiveTab('googleads')}>
-                <Megaphone className="nav-item-icon" /> Google Ads Studio
-              </li>
               <li className={`nav-item ${activeTab === 'contentoptimizer' ? 'active' : ''}`} onClick={() => setActiveTab('contentoptimizer')}>
                 <Sparkles className="nav-item-icon" /> Content Optimizer
               </li>
@@ -347,6 +364,7 @@ export default function App() {
             <div style={{ minWidth: 0 }}>
             <h1 className="page-title">
               {activeTab === 'dashboard' && 'Dashboard Overzicht'}
+              {activeTab === 'campagnewizard' && 'Campagne Wizard & AI Lead Funnel Generator'}
               {activeTab === 'googleads' && 'Google Ads Campaign Studio & Directe Export'}
               {activeTab === 'contentoptimizer' && 'AI Content Generator & Title Tag Optimizer'}
               {activeTab === 'localpack' && 'Google Maps & Local Pack Audit (Google Top 3 D-pack)'}
@@ -504,6 +522,10 @@ export default function App() {
 
         {activeTab === 'reports' && (
           <ReportsView dashboardData={dashboardData} />
+        )}
+
+        {activeTab === 'campagnewizard' && (
+          <CampaignWizardView projectId={activeProject?.id} />
         )}
 
         {activeTab === 'googleads' && (

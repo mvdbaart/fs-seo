@@ -24,6 +24,7 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
   const [autoCheckFrequency, setAutoCheckFrequency] = useState('daily');
   const [reportRecipients, setReportRecipients] = useState('');
   const [ga4PropertyId, setGa4PropertyId] = useState('');
+  const [ga4ExcludedPaths, setGa4ExcludedPaths] = useState('/auth, /admin, /portaal');
   const [clarityProjectId, setClarityProjectId] = useState('');
   // Ads-secrets worden nooit teruggegeven door de API; leeg laten = ongewijzigd.
   const [adsConnected, setAdsConnected] = useState(false);
@@ -171,6 +172,7 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
       if (data.business_address) setBusinessAddress(data.business_address);
       if (data.business_phone) setBusinessPhone(data.business_phone);
       if (data.ga4_property_id) setGa4PropertyId(data.ga4_property_id);
+      if (data.ga4_excluded_paths !== undefined) setGa4ExcludedPaths(data.ga4_excluded_paths);
       if (data.clarity_project_id) setClarityProjectId(data.clarity_project_id);
       setAdsConnected(Boolean(data.google_ads_connected));
       setGbpConnected(Boolean(data.gbp_connected));
@@ -221,6 +223,7 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
         business_address: businessAddress,
         business_phone: businessPhone,
         ga4_property_id: ga4PropertyId,
+        ga4_excluded_paths: ga4ExcludedPaths,
         clarity_project_id: clarityProjectId,
         google_ads_customer_id: adsCustomerId,
         google_ads_login_customer_id: adsLoginCustomerId,
@@ -555,7 +558,7 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
           </div>
 
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 12px' }}>Conversie & UX Analytics Koppelingen</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
                 Google Analytics 4 (GA4) Property ID
@@ -587,6 +590,22 @@ export default function SettingsView({ activeProject, currentUser, onProjectChan
                 Vind in Clarity Settings ➔ Overview ➔ Project ID. Alleen voor de doorklik; Clarity heeft geen automatische koppeling.
               </span>
             </div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
+              Uitgesloten paden in Analytics (interne pagina's)
+            </label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="/auth, /admin, /portaal"
+              value={ga4ExcludedPaths}
+              onChange={(e) => setGa4ExcludedPaths(e.target.value)}
+            />
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+              Komma-gescheiden lijst met paden die niet getoond hoeven te worden in de Analytics-landingspagina's tabel en adviezen (bijv. <code>/auth, /admin, /portaal</code>).
+            </span>
           </div>
 
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '8px 0 4px' }}>

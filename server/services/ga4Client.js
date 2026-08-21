@@ -316,7 +316,7 @@ async function fetchAllChannelSessions(propertyId, { startDate, endDate }) {
   return result.totals?.sessions ?? 0;
 }
 
-async function fetchOrganicLandingPages(propertyId, { startDate, endDate }, limit = 50) {
+async function fetchOrganicLandingPages(propertyId, { startDate, endDate }, limit = 150) {
   const result = await runReportWithKeyEvents(propertyId, {
     startDate,
     endDate,
@@ -432,7 +432,7 @@ async function getGa4Summary(project, windows) {
     const [totals, previousTotals, landingPages] = await Promise.all([
       fetchOrganicTotals(propertyId, windows.current),
       fetchOrganicTotals(propertyId, windows.previous),
-      fetchOrganicLandingPages(propertyId, windows.current, 50)
+      fetchOrganicLandingPages(propertyId, windows.current, 150)
     ]);
 
     // Custom channel groups: 0 organisch terwijl er wel verkeer is.

@@ -12,24 +12,41 @@ import {
   Eye, 
   Zap,
   Activity,
-  UserCheck
+  UserCheck,
+  Filter,
+  Shield,
+  Plus,
+  X,
+  Save,
+  Check
 } from 'lucide-react';
 import AiPromptCanvas from './AiPromptCanvas';
 
 export default function Ga4ClarityView({ projectId, activeProject }) {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pageFilter, setPageFilter] = useState('seo_only'); // 'seo_only' or 'all'
+  const [showExcludeManager, setShowExcludeManager] = useState(false);
+  const [excludedPaths, setExcludedPaths] = useState(['/auth', '/admin', '/portaal']);
+  const [newPathInput, setNewPathInput] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     fetchAnalyticsData();
   }, [projectId]);
 
-  const fetchAnalyticsData = async () => {
+  const fetchAnalyticsData = async (customExcludedList) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/projects/${projectId || 1}/ga4-clarity`);
+      const activeList = customExcludedList || excludedPaths;
+      const queryParam = encodeURIComponent(activeList.join(', '));
+      const res = await fetch(`/api/projects/${projectId || 1}/ga4-clarity?excluded_paths=${queryParam}`);
       const data = await res.json();
       setAnalyticsData(data);
+      if (data.excludedPaths && Array.isArray(data.excludedPaths) && !customExcludedList) {
+        setExcludedPaths(data.excludedPaths);
+      }
     } catch (err) {
       console.error('Fout bij ophalen GA4/Clarity data:', err);
     } finally {
@@ -37,13 +54,60 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
     }
   };
 
+  const handleAddExcludedPath = (pathToAdd) => {
+    const raw = (pathToAdd || newPathInput).trim().toLowerCase();
+    if (!raw) return;
+    const formatted = raw.startsWith('/') || raw === '(not set)' ? raw : `/${raw}`;
+    if (!excludedPaths.includes(formatted)) {
+      const updated = [...excludedPaths, formatted];
+      setExcludedPaths(updated);
+      setNewPathInput('');
+      fetchAnalyticsData(updated);
+    } else {
+      setNewPathInput('');
+    }
+  };
+
+  const handleRemoveExcludedPath = (pathToRemove) => {
+    const updated = excludedPaths.filter(p => p !== pathToRemove);
+    setExcludedPaths(updated);
+    fetchAnalyticsData(updated);
+  };
+
+  const handleSaveExcludedAsDefault = async () => {
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ga4_excluded_paths: excludedPaths.join(', ')
+        })
+      });
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2500);
+      } else {
+        const data = await res.json();
+        alert('Opslaan mislukt: ' + (data.error || 'Onbekende fout'));
+      }
+    } catch (err) {
+      alert('Opslaan mislukt: ' + err.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   if (loading && !analyticsData) return <div className="card">Laden van GA4 & Clarity Analytics...</div>;
   if (!analyticsData) return null;
 
   const {
-    isGa4Connected, totals, previousTotals, landingPageInsights = [], recommendations = [],
-    clarityProjectId, clarityUrl, clarityMessage, period, message, channelWarning
+    isGa4Connected, totals, previousTotals, landingPageInsights = [], allLandingPages = [],
+    excludedLandingPages = [], excludedCount = 0, excludedSessionsCount = 0,
+    recommendations = [], clarityProjectId, clarityUrl, clarityMessage, period, message, channelWarning
   } = analyticsData;
+
+  const displayedPages = pageFilter === 'seo_only' ? landingPageInsights : (allLandingPages.length ? allLandingPages : landingPageInsights);
 
   // Nooit een getal tonen dat er niet is: een streepje is eerlijker dan een gok.
   const fmt = (value) => (value === null || value === undefined || value === '' ? '—' : value);
@@ -68,7 +132,7 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
             </p>
           </div>
 
-          <button className={`btn btn-primary ${loading ? 'btn-progress-container' : ''}`} onClick={fetchAnalyticsData} disabled={loading}>
+          <button className={`btn btn-primary ${loading ? 'btn-progress-container' : ''}`} onClick={() => fetchAnalyticsData()} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             {loading ? 'Ophalen & Analyseren...' : 'Vernieuw Analytics'}
             {loading && <div className="btn-progress-bar" />}
@@ -160,16 +224,186 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
         )}
       </div>
 
-      {/* Table: Landingspagina's uit organisch zoekverkeer */}
+      {/* Table: Landingspagina's uit organisch zoekverkeer met Uitsluitingen Filter */}
       {isGa4Connected && (
         <div className="card">
-          <h3 className="card-title" style={{ justifyContent: 'space-between' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <BarChart2 size={20} color="var(--primary)" /> Landingspagina's uit organisch zoekverkeer
-            </span>
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+            <h3 className="card-title" style={{ margin: 0 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart2 size={20} color="var(--primary)" /> Landingspagina's uit organisch zoekverkeer
+              </span>
+            </h3>
 
-          {landingPageInsights.length === 0 ? (
+            {/* Filter Toggle Buttons & Manager Knop */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPageFilter('seo_only')}
+                  className={`btn ${pageFilter === 'seo_only' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.8rem', padding: '5px 12px', border: 'none' }}
+                >
+                  🎯 Alleen SEO Landingspagina's ({landingPageInsights.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPageFilter('all')}
+                  className={`btn ${pageFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.8rem', padding: '5px 12px', border: 'none' }}
+                >
+                  🌐 Alle Pagina's ({allLandingPages.length || landingPageInsights.length})
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className={`btn btn-secondary ${showExcludeManager ? 'btn-primary' : ''}`}
+                onClick={() => setShowExcludeManager(!showExcludeManager)}
+                style={{ fontSize: '0.8rem', padding: '5px 12px' }}
+                title="Beheer uitgesloten paden zoals /auth, /admin, /portaal"
+              >
+                <Shield size={14} /> Uitsluitingen ({excludedCount})
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Actief Info Banner */}
+          {pageFilter === 'seo_only' && excludedCount > 0 && (
+            <div style={{
+              background: 'rgba(5, 150, 105, 0.06)',
+              border: '1px solid rgba(5, 150, 105, 0.2)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 14px',
+              fontSize: '0.82rem',
+              color: 'var(--text-main)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '14px'
+            }}>
+              <div>
+                🛡️ <strong>Filter actief:</strong> {excludedCount} interne pagina's ({excludedSessionsCount} bezoeken) zijn verborgen op basis van uitgesloten paden (<code>{excludedPaths.join(', ')}</code>).
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExcludeManager(!showExcludeManager)}
+                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+              >
+                {showExcludeManager ? 'Sluit beheer' : 'Paden bewerken'}
+              </button>
+            </div>
+          )}
+
+          {/* Uitsluitingen Beheer Paneel */}
+          {showExcludeManager && (
+            <div style={{
+              background: 'var(--bg-main)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px',
+              marginBottom: '18px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Shield size={16} color="var(--primary)" /> Uitgesloten paden (Interne &amp; Systeem Pagina's)
+                  </div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
+                    Pagina's die beginnen met of matchen op deze paden worden genegeerd in de SEO-rapportage en CRO-adviezen.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveExcludedAsDefault}
+                  disabled={savingSettings}
+                  style={{ fontSize: '0.8rem', padding: '5px 12px' }}
+                >
+                  {saveSuccess ? <><Check size={14} /> Opgeslagen als standaard!</> : <><Save size={14} /> Opslaan als standaard</>}
+                </button>
+              </div>
+
+              {/* Tag Chips */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+                {excludedPaths.map((term, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      color: 'var(--danger)',
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600
+                    }}
+                  >
+                    <code>{term}</code>
+                    <X
+                      size={13}
+                      style={{ cursor: 'pointer', opacity: 0.8 }}
+                      onClick={() => handleRemoveExcludedPath(term)}
+                      title={`Verwijder ${term}`}
+                    />
+                  </span>
+                ))}
+                {excludedPaths.length === 0 && (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Geen uitgesloten paden ingesteld (alle pagina's worden getoond).</span>
+                )}
+              </div>
+
+              {/* Pad Toevoegen Form & Snelkeuzes */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '6px', flex: '1', minWidth: '220px' }}>
+                  <input
+                    type="text"
+                    className="input-field"
+                    style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                    placeholder="bijv. /auth, /admin, /portaal of (not set)"
+                    value={newPathInput}
+                    onChange={(e) => setNewPathInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddExcludedPath();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleAddExcludedPath()}
+                    style={{ fontSize: '0.8rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                  >
+                    <Plus size={14} /> Toevoegen
+                  </button>
+                </div>
+
+                {/* Snelkeuzes */}
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  <span>Snelkeuze:</span>
+                  {!excludedPaths.includes('/auth') && (
+                    <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '2px 6px' }} onClick={() => handleAddExcludedPath('/auth')}>+ /auth</button>
+                  )}
+                  {!excludedPaths.includes('/admin') && (
+                    <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '2px 6px' }} onClick={() => handleAddExcludedPath('/admin')}>+ /admin</button>
+                  )}
+                  {!excludedPaths.includes('/portaal') && (
+                    <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '2px 6px' }} onClick={() => handleAddExcludedPath('/portaal')}>+ /portaal</button>
+                  )}
+                  {!excludedPaths.includes('(not set)') && (
+                    <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '2px 6px' }} onClick={() => handleAddExcludedPath('(not set)')}>+ (not set)</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {displayedPages.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
               Geen landingspagina's met organisch verkeer gemeten in deze periode.
             </p>
@@ -188,9 +422,20 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {landingPageInsights.map((p, i) => (
-                    <tr key={i}>
-                      <td style={{ maxWidth: '280px', wordBreak: 'break-word' }}>{p.path}</td>
+                  {displayedPages.map((p, i) => (
+                    <tr key={i} style={p.isExcluded ? { background: 'rgba(239, 68, 68, 0.03)' } : {}}>
+                      <td style={{ maxWidth: '320px', wordBreak: 'break-word' }}>
+                        <span>{p.path}</span>
+                        {p.isExcluded && (
+                          <span
+                            className="badge badge-warning"
+                            style={{ fontSize: '0.68rem', padding: '1px 5px', marginLeft: '8px', verticalAlign: 'middle' }}
+                            title="Deze pagina is uitgesloten van SEO statistieken"
+                          >
+                            Intern / Uitgesloten
+                          </span>
+                        )}
+                      </td>
                       <td style={{ fontWeight: 600 }}>{fmtNum(p.sessions)}</td>
                       <td>{fmtNum(p.engagedSessions)}</td>
                       <td>{fmt(p.bounceRate)}</td>
@@ -244,3 +489,4 @@ export default function Ga4ClarityView({ projectId, activeProject }) {
     </div>
   );
 }
+

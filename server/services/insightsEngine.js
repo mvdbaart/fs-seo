@@ -4,6 +4,7 @@ const ga4Client = require('./ga4Client');
 const gbpPerformanceService = require('./gbpPerformanceService');
 const placesService = require('./placesService');
 const { isBrandKeyword } = require('../utils/brandFilter');
+const { isPathExcluded, parseExcludedPaths } = require('../utils/pathFilter');
 const { recordSnapshots, getSeries } = require('./metricSnapshots');
 
 /**
@@ -395,18 +396,27 @@ async function collectGa4Signals(project, windows) {
     gaps.push({ source: 'ga4', message: summary.channelWarning });
   }
 
+  // Paden uitsluiten zoals /auth, /admin, /portaal
+  const savedExcl = db.prepare("SELECT value FROM settings WHERE key = 'ga4_excluded_paths'").get();
+  const exclRaw = savedExcl ? savedExcl.value : '/auth, /admin, /portaal';
+  const excludedTerms = parseExcludedPaths(exclRaw);
+
+  const filteredLandingPages = (summary.landingPages || []).filter((p) => !isPathExcluded(p.path, excludedTerms));
+
   // Beide optioneel: totalen staan al vast, dit verrijkt alleen.
   const [previousLandingPages, dailySessions] = await Promise.all([
-    ga4Client.fetchOrganicLandingPages(summary.propertyId, windows.previous, 50).catch(() => []),
+    ga4Client.fetchOrganicLandingPages(summary.propertyId, windows.previous, 150).catch(() => []),
     ga4Client.fetchOrganicDaily(summary.propertyId, windows.current).catch(() => [])
   ]);
+
+  const filteredPrevLandingPages = (previousLandingPages || []).filter((p) => !isPathExcluded(p.path, excludedTerms));
 
   return {
     connected: true,
     propertyId: summary.propertyId,
     signals,
-    movers: { ga4LandingPages: buildLandingPageMovers(summary.landingPages, previousLandingPages) },
-    landingPages: summary.landingPages,
+    movers: { ga4LandingPages: buildLandingPageMovers(filteredLandingPages, filteredPrevLandingPages) },
+    landingPages: filteredLandingPages,
     dailySessions,
     dataGaps: gaps
   };

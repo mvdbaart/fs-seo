@@ -1,16 +1,7 @@
 const db = require('../db');
 const ga4Client = require('./ga4Client');
 const { buildWindows } = require('./insightsEngine');
-
-/**
- * GA4-cijfers per landingspagina, met conversie- en UX-advies dat volledig uit
- * de echte meetdata volgt.
- *
- * Microsoft Clarity heeft géén automatische koppeling in deze tool: de Data
- * Export API vraagt een token dat hier niet beheerd wordt. Rage clicks en dead
- * clicks worden daarom niet gerapporteerd — in plaats van verzonnen aantallen
- * krijg je een doorklik naar het Clarity dashboard zelf.
- */
+const { isPathExcluded, parseExcludedPaths } = require('../utils/pathFilter');
 
 function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -90,7 +81,7 @@ function buildGa4Recommendations(landingPages, totals) {
   return recommendations.slice(0, 8);
 }
 
-async function getGa4ClarityAnalytics(projectId, days = 28) {
+async function getGa4ClarityAnalytics(projectId, days = 28, excludedPathsParam) {
   const project = getProject(projectId);
   if (!project) throw new Error('Project niet gevonden');
 
@@ -99,7 +90,14 @@ async function getGa4ClarityAnalytics(projectId, days = 28) {
 
   const clarityProjectId = getSetting('clarity_project_id') || null;
 
-  const landingPages = (ga4.landingPages || []).map((page) => ({
+  let excludedPathsRaw = excludedPathsParam;
+  if (excludedPathsRaw === undefined) {
+    const savedSetting = getSetting('ga4_excluded_paths');
+    excludedPathsRaw = savedSetting !== '' ? savedSetting : '/auth, /admin, /portaal';
+  }
+  const excludedTerms = parseExcludedPaths(excludedPathsRaw);
+
+  const allLandingPages = (ga4.landingPages || []).map((page) => ({
     url: page.path,
     path: page.path,
     sessions: page.sessions,
@@ -109,8 +107,14 @@ async function getGa4ClarityAnalytics(projectId, days = 28) {
     keyEvents: page.keyEvents,
     conversionRate: (page.keyEvents !== null && page.sessions > 0)
       ? pct((page.keyEvents / page.sessions) * 100)
-      : null
+      : null,
+    isExcluded: isPathExcluded(page.path, excludedTerms)
   }));
+
+  const landingPageInsights = allLandingPages.filter(p => !p.isExcluded);
+  const excludedLandingPages = allLandingPages.filter(p => p.isExcluded);
+  const excludedCount = excludedLandingPages.length;
+  const excludedSessionsCount = excludedLandingPages.reduce((acc, p) => acc + (p.sessions || 0), 0);
 
   const totals = ga4.connected
     ? {
@@ -157,8 +161,13 @@ async function getGa4ClarityAnalytics(projectId, days = 28) {
     period: windows,
     totals,
     previousTotals,
-    landingPageInsights: landingPages,
-    recommendations: ga4.connected ? buildGa4Recommendations(ga4.landingPages || [], ga4.totals) : [],
+    landingPageInsights,
+    allLandingPages,
+    excludedLandingPages,
+    excludedCount,
+    excludedSessionsCount,
+    excludedPaths: excludedTerms,
+    recommendations: ga4.connected ? buildGa4Recommendations(landingPageInsights, ga4.totals) : [],
     serviceAccountEmail: ga4.serviceAccountEmail,
     channelWarning: ga4.channelWarning || null,
     message: ga4.connected ? null : ga4.message
@@ -166,5 +175,7 @@ async function getGa4ClarityAnalytics(projectId, days = 28) {
 }
 
 module.exports = {
-  getGa4ClarityAnalytics
+  getGa4ClarityAnalytics,
+  isPathExcluded,
+  parseExcludedPaths
 };
